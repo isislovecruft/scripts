@@ -26,6 +26,20 @@
 # :copyright: (c) 2012-2013 Isis Lovecruft
 # :license: AGPLv3, see https://www.gnu.org/licenses/agpl-3.0.txt
 #
+# v0.0.5: It now knows if it's been sourced or executed, and if it was executed,
+#         it prints the export commands which need to be run on stdout. Because
+#         they are printed exacted as they should be run. 
+#
+#         We *should* be able to coproc that output from other scripts, piping
+#         stdout of the coproc into the stdin of the other script, and wrap it
+#         in an exec call, something like this:
+#
+#            GD=`which gitdate`
+#            { coproc gitdate { $GD "$@" ;} >&3;} 3>&1
+#            { echo 'Thu Feb 28 11:47:04 2045 -1000' >&${gitdate[1]} ;} >&0
+#
+#         except that is not right yet and still not working.
+#
 # v0.0.4: Fix so that timezones east of UTC shift backwards.
 #         Add better date string parsing and some other fixes.
 # v0.0.3: Also changes the months and years, because that would suck if your
@@ -35,7 +49,11 @@
 #_____________________________________________________________________________
 
 ## Uncomment for debugging:
-#set -x --
+#DEBUG=true
+
+## Uncomment for really verbose debugging, and be sure to uncomment the
+## the corresponding line at the end
+#set -x -
 
 ## Git uses the system time settings through mktime().  Do a "$ git log" to see
 ## the timezone offset for your system.  This script gets your timezone offset
@@ -51,16 +69,53 @@
 
 #TIMEOFFSET=-0400
 
-## git stores datestrings in the form: Sun Aug 19 08:34:12 2012 -0400
-## date uses:                          Mon May  6 21:00:18 UTC 2013
+if [ "x$0" == 'x-bash' ] ; then
+    if test "$DEBUG" ; then printf "Detected that we were sourced.\n"; fi
+elif test -n "${0#gitdate}" ; then
+    if test "$DEBUG" ; then printf "We weren't sourced.\n"; fi
+fi
 
-DAY=$(date +"%a")
-MONTH=$(date +"%b")
-DATE=$(date +"%d")
-HOUR=$(date +"%H")
-MINSEC=$(date +"%M:%S")
-YEAR=$(date +"%Y")
-TIMEZONE=$(date +"%z")
+## git stores datestrings as: Sun Aug 19 08:34:12 2012 -0400
+## date uses:                 Mon May  6 21:00:18 UTC 2013
+
+if test $# -eq 0 ; then
+    if test "$DEBUG" ; then
+        printf "We didn't get a datestring argument.\n"
+    fi
+    if [ "$#" = '0' ] ; then
+        DAY=$(date +"%a")
+        MONTH=$(date +"%b")
+        DATE=$(date +"%d")
+        HOUR=$(date +"%H")
+        MINSEC=$(date +"%M:%S")
+        YEAR=$(date +"%Y")
+        TIMEZONE=$(date +"%z")
+    fi
+elif test $# -eq 1 ; then
+    if test "$DEBUG" ; then
+        printf "Converting git datestring: %s\n" "$1"
+    fi
+    DAY=$(echo "$1" | cut -d ' ' -f 1)
+    MONTH=$(echo "$1" | cut -d ' ' -f 2)
+    DATE=$(echo "$1" | cut -d ' ' -f 3)
+    TIME=$(echo "$1" | cut -d ' ' -f 4)
+    YEAR=$(echo "$1" | cut -d ' ' -f 5)
+    TIMEZONE=$(echo "$1" | cut -d ' ' -f 6)
+    HOUR=$(echo "$TIME" | cut -d ':' -f 1)
+    MIN=$(echo "$TIME" | cut -d ':' -f 2)
+    SEC=$(echo "$TIME" | cut -d ':' -f 3)
+    MINSEC=$(echo "${MIN}:${SEC}")
+    unset TIME
+    unset MIN
+    unset SEC
+else
+    printf "\nUsage:\nTo change a specific commit's date, run as:\n"
+    printf "    . gitdate 'Mon Dec 29 17:45:54 2011 +0800'\n"
+    printf "or as:\n"
+    printf "    gitdate 'Mon Dec 29 17:45:54 2011 +0800'\n"
+    printf "and then run the printed export commands to change your shell's\n"
+    printf "variables.\n"
+fi  
 
 for mnth in Jan Mar May Jul Aug Oct Dec ; do
     if [[ "$mnth" = "$MONTH" ]]; then LONG_MONTH=true ; fi
@@ -75,7 +130,7 @@ elif [[ "${TIMEOFFSET:0:1}" = '+' ]] ; then
     TIMEOFFSET=${TIMEOFFSET:1}
     IS_EAST=true
 else
-    echo
+    printf "Error: TIMEOFFSET variable did not start with '-' or '+'"
 fi
 
 ## 'let' requires the leading zero stripped
@@ -85,14 +140,16 @@ fi
 
 if test "$IS_WEST" ; then
     let SPILLOVER=24-TIMEOFFSET
-
     if [ "$HOUR" -lt "$SPILLOVER" ]; then
         let HOUR+=TIMEOFFSET
     else
         let TILMIDNIGHT=24-HOUR
         let HOUR=TIMEOFFSET-TILMIDNIGHT
         FALSEDAWN=true
+        unset TILMIDNIGHT
     fi
+    unset TIMEOFFSET
+    unset SPILLOVER
 
     # If the hour is one digit, prepend a zero.
     if [ "${#HOUR}" -eq "1" ]; then
@@ -110,6 +167,7 @@ if test "$IS_WEST" ; then
         elif [ "$DAY" = "Sun" ]; then NEXTDAY=$(echo "Mon") ;
         fi
         DAY=$NEXTDAY
+        unset NEXTDAY
 
         if test "$LONG_MONTH" ; then
             if [[ "$DATE" -lt "31" ]]; then let DATE+=1 ;
@@ -143,19 +201,26 @@ if test "$IS_WEST" ; then
             fi
         fi
     fi
+    unset FALSEDAWN
     if [[ -n "$NEXTMONTH" ]]; then
         MONTH=$NEXTMONTH
     fi
+    unset NEXTMONTH
 
 elif test "$IS_EAST" ; then
-    let SPILLOVER=24-TIMEOFFSET
-    let SPILLOVER=24-SPILLOVER
-
-    if [ "$HOUR" -lt "$SPILLOVER" ]; then
+    if [ "$HOUR" -lt "$TIMEOFFSET" ]; then
+        let SPILLOVER=24-TIMEOFFSET
+        let HOUR=HOUR+SPILLOVER
         MAKE_YESTERDAY=true
+    else
+        ## 'let' requires the leading zero stripped
+        if [[ "${HOUR:0:1}" = '0' ]] ; then
+            HOUR=${HOUR:1}
+        fi
+        let HOUR=HOUR-TIMEOFFSET
     fi
-
-    let HOUR=HOUR-TIMEOFFSET
+    unset TIMEOFFSET
+    unset SPILLOVER
 
     # If the hour is one digit, prepend a zero.
     if [ "${#HOUR}" -eq "1" ]; then
@@ -173,16 +238,12 @@ elif test "$IS_EAST" ; then
         elif [ "$DAY" = "Sun" ]; then LASTDAY=$(echo "Sat") ;
         fi
         DAY=$LASTDAY
+        unset LASTDAY
 
         if $LONG_MONTH ; then
-            if [[ "$DATE" -eq "1" ]]; then
-                if [[ "$MONTH" = "Mar" ]]; then
-                    LASTMONTH=$(echo "Feb")
-                    DATE=28
-                fi
-                if [[ "$MONTH" = "Jan" ]]; then
-                    LASTMONTH=$(echo "Dec") ;
-                    let YEAR=YEAR-1
+            if [[ "$DATE" -eq "1" ]]; then 
+                if [[ "$MONTH" = "Jan" ]]; then LASTMONTH=$(echo "Dec"); 
+                    let YEAR=YEAR-1 ;
                 elif [[ "$MONTH" = "May" ]]; then LASTMONTH=$(echo "Apr") ;
                 elif [[ "$MONTH" = "Jul" ]]; then LASTMONTH=$(echo "Jun") ;
                 elif [[ "$MONTH" = "Aug" ]]; then LASTMONTH=$(echo "Jul") ;
@@ -190,6 +251,9 @@ elif test "$IS_EAST" ; then
                 elif [[ "$MONTH" = "Dec" ]]; then LASTMONTH=$(echo "Nov") ;
                 fi
                 DATE=30
+                if [[ "$MONTH" = "Mar" ]]; then LASTMONTH=$(echo "Feb");
+                    DATE=28 ;
+                fi
             else
                 let DATE=DATE-1
             fi
@@ -206,17 +270,31 @@ elif test "$IS_EAST" ; then
                 let DATE=DATE-1
             fi
         fi
+        unset LONGMONTH
     fi
+    unset MAKE_YESTERDAY
     if [[ -n "$LASTMONTH" ]]; then
         MONTH=$LASTMONTH
     fi
+    unset LASTMONTH
 fi
+unset IS_EAST
+unset IS_WEST
+unset LONG_MONTH
 
 export GIT_AUTHOR_DATE=$(echo "$DAY $MONTH $DATE $HOUR:$MINSEC $YEAR +0000")
 export GIT_COMMITTER_DATE=$GIT_AUTHOR_DATE
-printf "Exported the following variable into the current shell:\n"
-printf "GIT_AUTHOR_DATE=%s\nGIT_COMMITTER_DATE=%s\n" \
-    "$GIT_AUTHOR_DATE" "$GIT_COMMITTER_DATE"
+
+## only print what we exported if we were not sourced:
+if ! [ "x$0" = 'x-bash' ] ; then
+    if test -n "${0#gitdate}" ; then
+        if test "$DEBUG" ; then
+            printf "\nPlease copy and run the following export commands:\n\n"
+        fi
+        printf "export GIT_AUTHOR_DATE='%s'\nexport GIT_COMMITTER_DATE='%s'\n" \
+            "$GIT_AUTHOR_DATE" "$GIT_COMMITTER_DATE"
+    fi
+fi
 
 unset DAY
 unset MONTH
@@ -226,21 +304,6 @@ unset MINSEC
 unset YEAR
 unset TIMEZONE
 
-unset IS_EAST
-unset IS_WEST
-unset LONG_MONTH
-unset TIMEOFFSET
-unset SPILLOVER
-
-unset FALSEDAWN
-unset TILMIDNIGHT
-unset NEXTDAY
-unset NEXTMONTH
-
-unset MAKE_YESTERDAY
-unset LASTDAY
-unset LASTMONTH
-
 ## If debugging was enabled at the top, make sure it's off when we return
 ## to a normal shell:
-#set +x --
+#set +x
