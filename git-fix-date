@@ -1,0 +1,110 @@
+#!/bin/bash
+##############################################################################
+#
+# git-fix-date
+# -------------------
+# Change all occurences of one timezone in git commits to another.
+#
+# @author Isis Agora Lovecruft, 0x2cdb8b35
+# @date 24 March 2013
+# @version 0.0.1
+##############################################################################
+
+## git filter-branch to replace GIT_AUTHOR_DATE and GIT_COMMITTER_DATE, setting
+## all times to their equivalent in UTC.
+
+## The path to your copy of my gitdate script:
+GITDATE=`which gitdate`
+
+if test -z "$DONT_CARE_IF_ITS_BROKEN" ; then
+    printf "\nThis script is broken. Please fix me!\n\nIt currently needs:\n"
+    printf "  * A way to run git-filter-branch in a coproc, taking the function filterdate()\n"
+    printf "    (included in this script), or the contents of it, as an argument to either\n"
+    printf "    '--env-filter' or '--commit-filter'.\n"
+    printf "  * A way to cause the '$@' variables in filterdate() to not apply to the cmdline\n"
+    printf "    arguments for this file, but to the commit hashes iterated through \n"
+    printf "    filterdate(). I think this would be something like 'set -e -' combined with\n"
+    printf "     git-filter-branch's internal map() function, but I'm not sure.\n"
+    printf "  * The thing I was trying to do with coproc will not work because coprocesses\n"
+    printf "    in bash are not designed as usual, and will not handle loops. \n"
+    printf "    see http://stackoverflow.com/q/7689100 http://stackoverflow.com/q/7682196 \n\n"
+    exit 1
+fi
+
+skip_commit()
+{
+    shift;
+    while [ -n "$1" ];
+    do
+        shift;
+        map "$1";
+        shift;
+    done;
+}
+
+function filterdate () 
+{
+    if [ "${GIT_AUTHOR_DATE: -5}" = "$orig_tz" ] ; then 
+        . /home/isis/scripts/gitdate "$GIT_AUTHOR_DATE"
+        export GIT_AUTHOR_DATE
+        git commit-tree "$@"
+    else 
+        skip_commit "$@"
+    fi
+}
+
+cat <<EOF
+Which timezone would you like to change to UTC? (e.g. if "git log"
+shows "AuthorDate: Sun Aug 19 08:34:12 2012 -0400", then the timezone
+should be specified as the offset, e.g. "-0400":
+EOF
+
+read -p"What is the offset of the timezone you would like to filter? " orig_tz
+echo "Should we filter the current branch now, changing all occurences of"
+read -p"the original timezone $orig_tz to UTC +0000? (y/N) " choice
+read -p"Should we also modify the git AuthorDate timestamps to be UTC? (y/N) " modauth
+
+case $choice in
+    y|Y)
+        case $modauth in
+            y|Y)
+                git filter-branch --commit-filter '
+                    if [ "${GIT_AUTHOR_DATE: -5}" = "$orig_tz" ] ; then 
+                        . $GITDATE "$GIT_AUTHOR_DATE" ; 
+                        git commit-tree "$@" ;
+                    else
+                        skip_commit "$@" ;
+                    fi' HEAD
+                ;;
+            * )
+                set -x --
+                read GAD GCD < <(git filter-branch --commit-filter '
+                         if [ "${GIT_AUTHOR_DATE: -5}" = "$orig_tz" ] ; then
+                             . $GITDATE "$GIT_AUTHOR_DATE" ;
+                             git commit-tree '$@' ;
+                         else
+                             skip_commit '$@' ;
+                         fi ' HEAD)
+                echo $GAD
+                echo $GCD
+
+                # { coproc { git filter-branch --commit-filter '
+                #          if [ "${GIT_AUTHOR_DATE: -5}" = "$orig_tz" ] ; then
+                #              . $GITDATE "$GIT_AUTHOR_DATE" ;
+                #              git commit-tree $@ ;
+                #          else
+                #              skip_commit $@ ;
+                #          fi ' HEAD ;} >&3 ;} 3>&1
+
+                #exec >&${fdate[0]}
+                #while IFS= read -ru 3 x; do 
+                #    printf '%s\n' "$x" 1>&0
+                #done
+                ;;
+            esac
+        ;;
+    *)
+        echo "Exiting..." && exit 0
+        ;;
+esac
+
