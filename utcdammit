@@ -1,0 +1,149 @@
+#!/bin/bash
+###############################################################################
+#
+# UTCdammit 
+# ---------
+# Set the system timezone with tzselect to UTC, then select a different
+# timezone in this script, and call it to convert to the selected timezone, in
+# order to display the time and date correctly in shells.
+#
+# @author Isis Agora Lovecruft, 0x2cdb8b35
+# @date 25 July 2012
+# @version 0.0.1
+#______________________________________________________________________________
+# Changelog:
+###############################################################################
+
+## If you wish to set $LOCALTZ in this script, then set it here:
+LOCALTZ="America/Los_Angeles"
+
+function usage
+{
+    echo "Usage: $0 [options]"; echo;
+    echo "In order for this script to work least painfully, you should set an"
+    echo "environment variable, \$LOCALTZ, in your .profile or .bashrc, like so:"
+    echo "    LOCALTZ=\"America/Los_Angeles\""
+    echo "    export LOCALTZ"; echo;
+    echo "Options:"
+    echo "-l, --localtz           Set the local timezone"
+    echo "-t, --time              Display the local time (24-hour)"
+    echo "-w, --weekday           Display the local weekday (long)"
+    echo "-d, --date              Display the local date (day/month)"
+    echo "-x, --tmux              Display full local date for tmux"
+    echo "-c, --clock             Display full local date for clock"
+    echo "-h, --help              Show this cruft"; echo;
+    echo "Examples:"
+    echo "    \$ utcdammit -l \"America/Los_Angeles\" -t"
+    echo "     14:30 PDT"; echo;
+    echo "    \$ utcdammit -a"
+    echo "     14:30 PDT Wednesday 25/07"; echo;
+    exit -1
+}
+
+function setup
+{
+    ## Source .bashrc and .profile:
+    if [ -f "$HOME/.profile" ] ; then
+        . $HOME/.profile
+    else
+        ## If no .profile, pretend we are one:
+        if [ -n "$BASH_VERSION" ] ; then
+            if [ -f "$HOME/.bashrc" ] ; then
+                . $HOME/.bashrc
+            fi
+        fi
+    fi
+
+    if test -z "$LOCALTZ" ; then
+        LOCALTZ=$_LOCALTZ_
+        export LOCALTZ
+    fi
+}
+
+function fluxcapacitor
+{
+    if [[ "$LOCALTZ" == "" ]] || [[ "$LOCALTZ" == "$TZ" ]] ; then
+        echo "Error: No local timezone!"; echo;
+        exit 1
+    else
+        if test -n "$LOCALTZ" && test -z "$LOCALTIMEDAMMIT" ; then
+            echo "There was a problem setting the local time..."; echo;
+            exit 1
+        fi
+    fi
+}
+
+function timewarp
+{
+    if test -n $LOCALTZ ; then
+        if [[ "$TZ" != "$LOCALTZ" ]]; then
+            LOCALTIMEDAMMIT=`TZ=$LOCALTZ date +%H:%M%_4Z`
+            LOCALTIMESHORT=`TZ=$LOCALTZ date +%H:%M`
+            LOCALWEEKDAYDAMMIT=`TZ=$LOCALTZ date +%A`
+            LOCALDATE=`TZ=$LOCALTZ date +%d`
+            LOCALDATESHORT=`TZ=$LOCALTZ date +%d/%m`
+            LOCALMONTH=`TZ=$LOCALTZ date +%B`
+            LOCALTZDAMMIT_TMUX="$LOCALTIMEDAMMIT $LOCALWEEKDAYDAMMIT $LOCALDATESHORT"
+            LOCALTZDAMMIT_FULL="$LOCALWEEKDAYDAMMIT $LOCALDATE $LOCALMONTH"", ""$LOCALTIMESHORT"
+
+            export LOCALTIMEDAMMIT
+            export LOCALWEEKDAYDAMMIT
+            export LOCALDATE
+            export LOCALDATESHORT
+            export LOCALMONTH
+            export LOCALTZDAMMIT_TMUX
+            export LOCALTZDAMMIT_FULL
+        else 
+            echo "If you're trying to obscure your timezone, then why is your system clock set to the same timezone as your local one?"
+        fi
+    fi
+}
+
+
+if [ "$#" == "0" ]; then
+    usage
+    exit -1
+fi
+
+setup
+while [ "$1" != "" ]; do
+    case $1 in
+        -l | --localtz )      ## check number of args
+                              #echo "Number of args: $#"
+                              #ARE_WE_EVEN=$(expr $# / 2)
+                              #echo "$ARE_WE_EVEN"
+                              shift
+                              export LOCALTZ=$1
+                              fluxcapacitor
+                              ;;
+        -t | --time )         timewarp
+                              fluxcapacitor
+                              echo "$LOCALTIMEDAMMIT"
+                              ;;
+        -w | --weekday )      timewarp
+                              fluxcapacitor
+                              echo "$LOCALWEEKDAYDAMMIT"
+                              ;;
+        -d | --date )         timewarp
+                              fluxcapacitor
+                              echo "$LOCALDATESHORT"
+                              ;;
+        -x | --tmux )         timewarp
+                              fluxcapacitor
+                              echo "$LOCALTZDAMMIT_TMUX"
+                              ;;
+        -c | --clock )        timewarp
+                              fluxcapacitor
+                              echo "$LOCALTZDAMMIT_FULL"
+                              ;;
+        -h | --help )         usage
+                              exit -1
+                              ;;
+        * )                   echo "Error: You gave me an argument I didn't understand..."
+                              echo
+                              usage
+                              exit 1
+                              ;;
+    esac
+    shift
+done

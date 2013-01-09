@@ -1,0 +1,307 @@
+#!/bin/bash
+##############################################################################
+#
+# dnssecwithtor
+# -------------------
+# Configures Unbound, socat, and Tor, for resolving, validating, and caching
+# DNS requests through the Tor network.
+#
+# see https://labs.nic.cz/page/993/dnssec-validation-over-tor--linux-/
+#
+# @author Isis Agora Lovecruft, 0x2cdb8b35
+# @date 25 August 2012
+# @version 0.0.1
+#
+##############################################################################
+
+TOR_SOCKS_PORT="9050"
+
+PATH_UNBOUND=`which unbound`
+PATH_SOCAT=`which socat`
+PATH_TOR=`which tor`
+PATH_DIG=`which dig`
+
+OARC_RES="149.20.64.20"
+CZ_NIC_RES="217.31.204.130"
+
+function check_deps ()
+{
+    FAILZ=""
+    ## XXX TODO offer to get dependencies for user
+    test -x $PATH_UNBOUND || FAILZ="unbound "
+    test -x $PATH_SOCAT || FAILZ=$FAILZ"socat "
+    test -x $PATH_TOR || FAILZ=$FAILZ"tor "
+    test -x $PATH_DIG || FAILZ=$FAILZ"bind-utils "
+
+    if [[ "$FAILZ" != "" ]] ; then
+        echo "do \"apt-get install $FAILZ"
+        exit 1
+    fi
+}
+
+function explain_all_of_the_things () {
+    echo "DNS resolution will follow this chain:"
+    echo ""
+    echo "QUERY" 
+    echo " \\-> localhost:53 "
+    echo "        \\-> unbound -> 0.0.0.0:5353 -> 127.0.0.1:5353 "
+    echo "                                               / "
+    echo "             socat <---------------------------  "
+    echo "              \\-> local SOCKS4a proxy -> 127.0.0.1:$TOR_SOCKS_PORT "
+    echo "                                               / "
+    echo " tor <-----------------------------------------  "
+    echo "  \\ "
+    echo "   \\-> guard " 
+    echo "          \\-> middle "
+    echo "                  \\-> exit -> ?.?.?.?:53 <--> recursive DNS resolve"
+    echo "                                    / "
+    echo "                      exit <--------  "
+    echo "             middle <-/ "               
+    echo "      guard <-/ "
+    echo " tor <-/ "
+    echo "  \\     "
+    echo "   \\-> local SOCKS4a proxy   "
+    echo "          \\-> socat         "
+    echo "                \\-> unbound "
+    echo "                      \\-> validation -> local DNS cache "
+    echo "                                               / "
+    echo "RESPONSE <-------------------------------------  "
+    echo ""
+    echo "Totally not confusing at all, right?"
+    echo ""
+    echo ""
+}
+
+function check_dns ()
+{
+    ## Check that recursive, validated DNS resolves correctly without unbound
+
+    MSG1="Testing DNS resolution over TCP to recursive validating resolver"
+
+    echo "$MSG1 OARC at $OARC_RES ... "; echo;
+    ANS1=`dig +tcp +dnssec labs.nic.cz @$OARC_RES  | grep -C 1 ';; flags'`
+    echo "$ANS1"; echo;
+    CHECK1=$(echo $ANS1 | grep "NOERROR" | wc -l)
+    if [[ "$CHECK1" == "1" ]] ; then
+        echo "The resolver at $OARC_RES is working correctly."
+    else
+        echo "The resolver at $OARC_RES either could not be reached or something else went wrong!"
+        echo "Please debug your unbound installation and network settings."
+        echo "Exiting ..."
+        exit 1
+    fi
+
+    echo "$MSG1 labs.nic.cz at $CZ_NIC_RES"
+    ANS2=`dig +tcp +dnssec labs.nic.cz @$OARC_RES  | grep -C 1 ';; flags'`
+    echo "$ANS2"; echo;
+    CHECK2=$(echo $ANS2 | grep "NOERROR" | wc -l)
+    if [[ "$CHECK2" == "1" ]] ; then
+        echo "The resolver at $CZ_NIC_RES is working correctly."
+    else
+        echo "The resolver at $CZ_NIC_RES either could not be reached or something else went wrong!"
+        echo "Please debug your unbound installation and network settings."
+        echo "Exiting ..."
+        exit 1
+    fi
+}
+
+function check_tor ()
+{
+    echo "Checking that Tor is currently running ... "
+    CHECK5=$(pgrep tor | wc -l)
+    if [[ "$CHECK5" == "0" ]] ; then
+        echo "Process for Tor not found ..."
+        echo "Tor is not currently running ..."
+        echo "Starting Tor ..."
+        if test -x /etc/init.d/unbound ; then
+            sudo /etc/init.d/unbound start
+        else
+            echo "Could not find init script for Tor ..."
+            echo "Exiting ..."
+            exit 1
+        fi
+    else
+        echo "Tor process found ..."
+        echo "Tor is currently running ..."
+    fi
+}
+
+function check_socat ()
+{
+    if [ "$(pidof socat && echo $?)" != 0 ] ; then
+        echo "Starting socat tunnel ..." 
+        coproc socat TCP4-LISTEN:5353,bind=localhost,reuseaddr,fork SOCKS4A:localhost:149.20.64.20:53,socksport=$TOR_SOCKS_PORT
+    fi
+}
+
+function kill_socat ()
+{
+    if [ "$(pidof socat >/dev/null 2>&1 && echo $?)" = 0 ] ; then
+        kill $(pidof socat)
+    fi
+}
+
+
+function check_socat_conn_tor ()
+{
+    echo "Testing that the socat tunnel is connecting to Tor ..."
+    ANS4=`dig -p 5353 +tcp +dnssec labs.nic.cz @localhost`
+    CHECK4=$(echo  $ANS4 | grep "NOERROR" | wc -l)
+    if [[ "$CHECK4" == "0" ]] ; then
+        echo "Socat was unable to talk to Tor ..."
+        echo "We currently believe that your SOCKS port is $TOR_SOCKS_PORT."
+        echo "Please check your torrc to make sure this is correct, if your"
+        echo "torrc says otherwise, then edit the top line of this script "
+        echo "to match your torrc."
+        echo ""
+        echo "Exiting ..."
+    else
+        echo "Socat tunnel is connected to Tor, and a DNS request was completed:"
+        echo "$ANS4"
+        echo ""
+    fi
+}
+
+function check_unbound ()
+{
+    echo "Checking that unbound is currently running ... "
+    CHECK3=`pgrep unbound | wc -l`
+    if [[ "$CHECK3" == "0" ]] ; then
+        echo "Process for unbound not found ..."
+        echo "Unbound is not currently running ..."
+        echo "Starting unbound ..."
+        if test -x /etc/init.d/unbound ; then
+            sudo /etc/init.d/unbound start
+        else
+            echo "Could not find init script for unbound ..."
+            echo "Exiting ..."
+            exit 1
+        fi
+    else
+        echo "Unbound process found ..."
+        echo "Unbound is currently running ..."
+    fi
+}
+
+function check_dnssec ()
+{
+    echo "Testing DNS resolution of a DNSSEC query through unbound instance ..."
+    ANS6=`dig +dnssec labs.nic.cz @localhost`
+    CHECK6=$(echo  $ANS6 | grep "NOERROR" | wc -l)
+    if [[ "$CHECK6" == "0" ]] ; then
+        echo "Unbound appears to not be working ..."
+        echo "Although, we are about to backup the current config for unbound"
+        echo "and continue with a new config...should we continue doing so?"
+        select yn in "yes" "no" ; do
+            case $yn in
+                yes ) 
+                    break
+                    ;;
+                no )
+                    echo "Exiting ..."
+                    exit 0
+                    ;;
+                * )
+                    exit 1
+                    ;;
+            esac
+        done
+    else
+        echo "Unbound resolved the query correctly ..."
+        echo "Checking that DNSSEC answer was validated according to root anchor ..."
+        CHECK7=$(echo  $ANS6 | grep "flags.*ad" | wc -l)
+        if [[ "$CHECK7" != "1" ]] ; then
+            echo "DNSSEC flag was missing from query results!"
+            echo "Maybe you haven't yet configured the root anchor?"
+            echo "See http://unbound.net/documentation/howto_anchor.html"
+        else
+            echo "DNSSEC flags present in query results ..."
+            echo "DNSSEC validation check passed ..."
+        fi
+    fi
+}
+
+function backup_unbound_conf ()
+{
+    MAYBECONF=$(locate -l 1 unbound.conf)
+    MAYBEBACK=$MAYBECONF".orig.bak"
+    DINOCONF="/etc/unbound/unbound.dinosaur"
+    if test -x $MAYBECONF ; then
+        if [[ "$MAYBECONF" == "/etc/unbound/unbound.conf" ]] ; then
+            echo "Backing up $MAYBECONF to $MAYBEBACK ..."
+            sudo cp $MAYBECONF $MAYBEBACK
+        fi
+    else
+        echo "Couldn't find /etc/unbound/unbound.conf ..."
+        echo "Hum. Do you have some strange configuration settings for unbound?"
+        echo "We weren't able to backup /etc/unbound/unbound.conf, so we're"
+        echo "going to go ahead and create the new config in its place ..."
+    fi    
+}
+
+function make_unbound_conf ()
+{
+    echo "Creating new unbound.conf file ..."
+    sudo touch $DINOCONF && \
+        sudo chmod a+rw $DINOCONF
+    cat > $DINOCONF<<EOF
+## generated by DiNoSaur script
+server:
+        interface: 127.0.0.1
+        port: 53
+        hide-identity: yes
+        hide-version: yes
+        harden-glue: yes
+        harden-glue: yes
+        ## because Tor only speaks TCP
+        tcp-upstream: yes
+
+forward-zone:
+        ## forward every query to our socat tunnel to Tor
+        name: "."
+        forward-addr: 0.0.0.0@5353
+EOF
+    sudo chmod a-w $DINOCONF
+    sudo cp $DINOCONF /etc/unbound/unbound.conf
+}
+
+if [[ "$#" == "0" ]] ; then
+    check_deps
+    check_dns
+    explain_all_of_the_things
+    check_tor
+    check_socat
+    check_socat_conn_tor
+    check_unbound
+    check_dnssec
+    backup_unbound_conf
+    make_unbound_conf
+    echo "Restarting unbound ..."
+    sudo /etc/init.d/unbound restart
+    echo "Checking DNSSEC query resolution through unbound -> socat -> Tor ..."
+    check_dnssec
+else
+    ## it wouldn't be a script without it...
+    cat <<"EOF"
+ ____________________________________
+| DiNoSaur! Recursive, validating,   |
+| caching, DNSSEC-enabled resolution |
+| through Unbound, socat, and Tor\!  |
+ ------------------------------------
+\                             .       .
+ \                           / `.   .' "
+  \                  .---.  <    > <    >  .---.
+   \                 |    \  \ - ~ ~ - /  /    |
+         _____          ..-~             ~-..-~
+        |  (A)|   \~~~\.'                    `./~~~/
+       ---------   \__/                        \__/
+      .'  O    \     /               /       \  "
+     (_____,    `._.'               |         }  \/~~~/
+      `----.          /       }     |        /    \__/
+            `-.      |       /      |       /      `. ,~~|
+                ~-.__|      /_ - ~ ^|      /- _      `..-'
+                     |     /        |     /     ~-.     `-. _  _  _
+                     |_____|        |_____|         ~ - . _ _ _ _ _>
+
+EOF
+fi

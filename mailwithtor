@@ -1,0 +1,59 @@
+#!/bin/bash
+###############################################################################
+#
+# mailwithtor
+# -----------
+# A simple socat script to start a local SOCKS4a server to connect msmtp and 
+# Tor.
+#
+# Usage: 
+#       $ ./mailwithtor & 
+#       $ mutt
+#
+# Note: This uses Tor between you and your mailserver. This means:
+#
+#       A local passive observer will see that you're using Tor, and the email
+#       recipient will see that the email came from your email account at your
+#       mailserver.
+#
+#       If your mailserver is crappily configured, and include an
+#       "X-Originating-IP" header or something similar, then this will hide
+#       your IP from that.
+#
+#       Pretty much the only purpose of this script is to hide from passive
+#       observers on your local network that you are connecting to a certain
+#       mailserver.
+#
+# @author Isis Agora Lovecruft, 0x2cdb8b35
+# @date 13 May 2012
+# @version 0.0.1
+#
+###############################################################################
+
+## set this to your Tor SocksPort:
+SOCKS_PORT=9050
+
+## set these to the address and port of your mailserver:
+MAILSERVER_FQDN="mailserver.com"
+MAILSERVER_PORT=465
+
+## YOU SHOULDN'T NEED TO CHANGE ANY OF THE FOLLOWING VARIABLES:
+## The "Account" stanza in your msmtp config that you wish to use:
+MSMTP_ACCOUNT="default"
+LOG_FILE="${HOME}/.mailwithtor.log"
+LOCK_FILE="${HOME}/.mailwithtor-lockfile"
+## Port for socat to pipe incoming connections to its own SOCKS server:
+SOCAT_LISTEN_PORT=2525
+
+## If you're calling this from commandline before starting mutt, uncomment the
+## following line and use "$ mailwithtor &":
+
+sudo socat -d -d -d -lu -L ${LOCK_FILE} -lf ${LOG_FILE} TCP4-LISTEN:2525,fork SOCKS4A:localhost:$MAILSERVER_FQDN:$MAILSERVER_PORT,socksport=$SOCKS_PORT,socksuser=""
+
+## If you're setting "set sendmail='/path/to/mailwithtor'", then 
+## uncomment the following lines: 
+## NOTE: this is broken. specifically the getting-the-passphrase-from-the-sudo-
+## prompt part.
+#sudo %?p?--passphrase-fd 0? socat -d -d -d -lu -L $HOME/.mailrc/$LOCK_FILE -lf $HOME/.mailrc/$LOG_FILE TCP4-LISTEN:2525,fork SOCKS4A:localhost:$MAILSERVER_FQDN:$MAILSERVER_PORT,socksport=$SOCKSPORT,socksuser="" & /usr/bin/msmtp -a $MSMTP_ACCOUNT
+#/usr/bin/msmtp -a default $1 $2 $3 $4 $5 $6 $7 $8
+

@@ -1,0 +1,229 @@
+#!/bin/bash
+##############################################################################
+#
+# golang
+# -------------------
+# Install or update Go language.
+#
+# Download Go source tarball and SHA1 hash from https://code.google.com. If 
+# hashcheck is okay, install and setup Go in /usr/local/go, and modify the 
+# system default $PATH to include it by appending to /etc/profile. 
+#
+# For x86_64 and 32-bit Linux, only. Should work on all distros, except for
+# RHEL and CentOS.
+#
+# @author Isis Agora Lovecruft, 0x2cdb8b35
+# @date  3 September 2012
+# @version 0.0.4
+#
+##############################################################################
+
+set -e
+
+GO_VERSION="1.0.3"
+
+function usage ()
+{
+    echo
+    echo "$0 [options]"
+    echo
+    echo "install           Install Go ${GO_VERSION}"
+    echo "reinstall         Update Go to ${GO_VERSION}"
+    echo "path              Export PATH to Go & GoTools"
+    echo
+}
+
+function install_go ()
+{
+    OUR_ARCH=$(uname -m)
+    FILE="https://go.googlecode.com/files/go"
+    DOWN="https://code.google.com/p/go/downloads/detail?name=go"
+    if [[ "$OUR_ARCH" == "x86_64" ]]; then
+        ARCH_STRING=".linux-amd64.tar.gz"
+    elif [[ "$OUR_ARCH" == "i686" ]]; then
+        ARCH_STRING=".linux-386.tar.gz"
+    else
+        echo "Unsupported architecture. Must be 64-bit or 32-bit."
+        exit 1
+    fi
+
+    tarball=${FILE}${GO_VERSION}${ARCH_STRING}
+    details=${DOWN}${GO_VERSION}${ARCH_STRING}
+
+    GO_SOURCE=${HOME}/go${GO_VERSION}.tar.gz
+    HTML_PAGE=${HOME}/go${GO_VERSION}.tar.gz.html
+
+    if ! test -f "$GO_SOURCE" ; then
+        if test -n "$tarball"; then
+            echo "Getting GoTools from:
+    ${tarball} "
+            echo "Downloading GoTools, which includes gc (go compiler)..."
+            wget --no-check-certificate -q -O $GO_SOURCE ${tarball}
+        else
+            echo "Error determining correct download...exiting..."
+            exit 1
+        fi
+    else
+        echo "We've already got the latest source code, using that..."
+    fi
+
+    if ! test -f "$HTML_PAGE" ; then
+        echo "Getting reported SHA1 from:
+    ${details} "
+        wget --no-check-certificate -q -O $HTML_PAGE ${details}
+        echo
+    else
+        echo "We've already got the reported SHA1 from code.google.com..."
+        echo
+    fi
+
+    theirs=/tmp/go_reported_hash
+    ours=/tmp/go_our_hash
+
+    echo "Checking SHA1 hash of downloaded source..."
+    grep "sha1" $HTML_PAGE | cut -d ">" -f 2 | cut -d "<" -f 1 | cat > $theirs
+    sha1sum $GO_SOURCE | cut -d " " -f 1 > $ours
+
+    echo "Reported SHA1 from Google Code: $(cat $theirs )"
+    echo "Computed SHA1 from download:    $(cat $ours )"
+
+    HASHDIFF=`diff ${theirs} ${ours}`
+    if [[ "$HASHDIFF" == "" ]]; then
+        echo
+        echo "Installing GoTools ..."
+        sudo tar -C /usr/local -xzf $GO_SOURCE && echo "Installation successful."
+    else
+        echo "WARNING: SHA1 sums do not match. Exiting..." & exit 1
+    fi
+}
+
+function clean_up ()
+{
+    JUNK="$theirs $ours $HTML_PAGE $GO_SOURCE "
+    echo
+    echo "Cleaning up..."
+    for file in $JUNK; do
+        if test -f $file ; then
+            echo "Removing ${file}..."
+            sudo rm $file
+        fi
+    done
+}
+
+function export_paths ()
+{
+    if [ $(id -u) -eq 0 ]; then
+        echo
+        echo "Modifying system \$PATH to include Go..."
+        sudo cat >> /etc/profile<<EOF
+## Path to GoTools
+export GOROOT=/usr/local/go
+export PATH=$PATH:$GOROOT/bin
+EOF
+        echo "Successfully updated \$PATH in /etc/profile."
+    else
+        echo
+        echo "Modifying user \$PATH..."
+        sudo cat >> $HOME/.profile<<FIN
+## Path to GoTools
+export GOROOT=/usr/local/go
+export PATH=$PATH:$GOROOT/bin
+FIN
+        echo "Successfully updated \$PATH in ${HOME}/.profile..."
+    fi
+}
+
+function root_check ()
+{
+    if [ $(id -u) -ne 0 ]; then
+        echo "Must be run as root."
+        exit 1
+    fi
+}
+
+function os_check ()
+{
+    if [ $(uname) != "Linux" ]; then
+        echo "Sorry, this only works for Linux."
+        exit 1
+    fi
+}
+
+function go_check ()
+{
+    if test -n $(which go) ; then
+        current=$(go version | cut -d " " -f 3 | cut -b 3- )
+        echo "Found previous Go installation. Version: ${current} "
+        if test -d /usr/local/go ; then
+            if [[ "$current" == "${GO_VERSION}" ]] ; then
+                echo "Already up to date!"
+                exit 0
+            elif [[ "$current" > "${GO_VERSION}" ]] ; then
+                echo "Oops. You've got Go ${current}, while we've got Go ${GO_VERSION}."
+                echo "Please mailto:isis@patternsinthevoid.net and tell Isis to update me."
+                echo
+            else
+                echo "Updating previous Go installation to ${GO_VERSION}..."
+            fi
+        fi
+    fi
+}
+
+function mercurial_check ()
+{
+    if test -z $(which hg) ; then
+        echo "Go requires mercurial.Please use your distro's package manager 
+to obtain it.
+Exiting..."
+    fi
+}
+
+if [[ "$#" == "0" ]]; then
+    usage
+    exit 1
+else
+    while [[ "x$1" != "x" ]]; do
+        case $1 in
+            install )
+                root_check
+                mercurial_check
+                os_check
+                go_check
+                install_go
+                clean_up
+                export_paths
+                echo
+                echo "Installation successful!"
+                echo
+                echo "To get started learning go, try doing:"
+                echo "    \$ go get code.google.com/p/go-tour/gotour "
+                echo
+                unset tarball
+                unset details
+                exit 0
+                ;;
+            reinstall )
+                root_check
+                mercurial_check
+                os_check
+                go_check
+                install_go
+                clean_up
+                echo
+                echo "Upgrade successful!"
+                echo
+                unset tarball
+                unset details
+                exit 0
+                ;;
+            path )
+                os_check
+                export_paths
+                exit 0
+                ;;
+            * )
+                usage
+                ;;
+        esac
+    done
+fi
