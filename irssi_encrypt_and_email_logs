@@ -1,0 +1,147 @@
+#!/bin/bash
+##############################################################################
+#
+# irssi_encrypt_and_email
+# -------------------
+# Encrypt IRC logs and email them to an address.
+#
+# @author Isis Agora Lovecruft, 0x2cdb8b35
+# @date 27 December 2012
+# @version 0.0.1
+#-----------------------------------------------------------------------------
+# Changelog:
+##############################################################################
+
+## Fill these in with who/where you want the logs sent to:
+email="isis@patternsinthevoid.net"
+keyid=2CDB8B35
+
+## Comment out to use "Subject: encrypted IRC messages", default email subject
+## is "Subject: encrypted IRC messages from <nick>"
+include_nick=true
+
+## Comment out to disable using the gpg --throw-keyids option. see man(1) gpg.
+throw_keyids=true
+
+## Directory containing the IRC logs to send:
+log_dir=/home/isis/.irssi/logs/oftc/
+
+## If you use mailx/sendmail, see below, you'll want to use the commented out
+## section with the ${encrypted}<<EOF HEREDOC.
+#mailcmd=/usr/bin/mailx
+#mailcmd=/usr/bin/sendmail
+mailcmd=/usr/bin/mutt
+
+## Extra argument for the mailcmd:
+mailargs=""
+
+[[ -r $HOME/.bashrc ]] && . $HOME/.bashrc
+
+if ! test -d "$log_dir" ; then
+    echo "Can't find ${log_dir}...Exiting..." && exit 1
+fi
+
+check=$(ls ${log_dir})
+if [[ "$?" != 0 ]] ; then
+    echo "You don't have permission to access ${log_dir}..." && exit 1
+else
+    for fh in `find $log_dir -name "*.log"` ; do
+        if [[ x$fh != x${log_dir}[#]*.log ]] ; then
+            non_channels=${non_channels}${fh}" "
+        fi
+    done
+
+    if test -n "$non_channels" ; then
+        crypt=${log_dir%/}"/encrypted"
+        now=$(date +"%Y-%m-%d_%H:%M")
+        subject="encrypted IRC messages"
+
+        our_temp=$HOME/.tmp-encrypted-irc-logs
+        if ! test -d "$our_temp" ; then mkdir $our_temp ; fi
+        TEMPDIR=$our_temp
+
+        ## check for key
+        gpg --fingerprint $keyid 1>/dev/null 2>&1
+        if [[ "$?" != "0" ]]; then 
+            keyid=${email} && gpg --list-keys $keyid 1>/dev/null 2>&1
+            if [[ "$?" != "0" ]]; then 
+                echo "Can't find key for ${keyid}...";
+                read -p"Should we try to fetch the key? (Y/n): " choice
+                case $choice in
+                    n ) echo "Exiting..." && exit 2 ;;
+                    * ) gpg --search $keyid ;;
+                esac
+            fi
+        fi
+
+        echo "Storing encrypted log files in ${crypt}..."
+        if ! test -d "$crypt" ; then 
+            echo "Creating directory ${crypt}..." && mkdir $crypt && echo 
+        fi
+
+        for chan in $non_channels; do
+            plaintext=${chan##*"/"}
+            nick=${plaintext%%".log"}
+
+            ## I don't really want an encrypted log of netsplits...
+            for skip in "chanserv" "nickserv" "auth" ; do
+                [[ "$nick" != "$skip" ]] || continue
+            done
+
+            ## /.irssi/logs/encrypted/<nick>-2012-12-31_21:59.gpg
+            encrypted=${crypt}"/"${nick}"-"${now}".gpg"
+            irc_nicks=${irc_nicks}${nick}" "
+
+            ## the "--always-trust" flag is because gpg throws a fit when
+            ## we encrypt to ourselves, if the primary has multiple subkeys
+            ## because the fprs won't match.
+            if [[ "${throw_keyids}" == "true" ]]; then
+                gpg --no-verbose --always-trust \
+                    -q --yes -a -o $encrypted \
+                    -e -R $keyid $chan
+            else
+                gpg --no-verbose --always-trust \
+                    -q --yes -a -o $encrypted \
+                    -e -r $keyid $chan
+            fi
+
+            if ! test -r "$encrypted"; then 
+                echo "Error encrypting logfile $chan."
+                echo "Exiting..." && exit $?
+            fi
+
+            if [[ "${include_nick}" == "true" ]]; then 
+                subj="${subject} from ${nick}"
+            else
+                subj="${subject}" 
+            fi
+
+            echo "Sending ${subject} from ${nick} to ${email}..."
+
+            ## for mutt and mutt-patched (and probably pine)
+            cat $encrypted | $($mailcmd ${mailargs} -s "${subj}" ${email})
+            echo "Finished sending ${subject} from ${nick}."
+        done
+
+## Comment out the above lines and use these instead for mailx and sendmail:
+#            $($mailcmd ${mailargs} -s "${subj}" ${email})<<EOF
+#~>$encrypted
+#~.
+#EOF
+#            echo "Finished sending ${subject} from ${nick}."
+#        done
+
+        if test -d "$our_temp" ; then 
+            rm -rf $our_temp
+            echo "Cleaning temporary directory of created encrypted files..."
+        fi
+
+        echo "Sent IRC logs of messages from nicks: ${irc_nicks}"
+        echo "Exiting..." && exit 0
+
+    else 
+        echo "No logfiles found..."
+        echo "Exiting..."
+        exit 2
+    fi
+fi
