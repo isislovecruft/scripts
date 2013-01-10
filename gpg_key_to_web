@@ -1,0 +1,217 @@
+#!/bin/bash
+##############################################################################
+#
+# gpg_key_to_web
+# -------------------
+# Upload a signed, timestamped copy of your gpg public key and fingerprint.
+#
+# @author Isis Agora Lovecruft, 0x2cdb8b35
+# @date 1 April 2012
+# @version 0.1.0
+#-----------------------------------------------------------------------------
+# Changelog:
+# v0.1.0: Added features to optionally input OTR fingerprints as well.
+##############################################################################
+
+set -efu
+
+function usage ()
+{
+    echo "$0  [options] <key ID>"
+    echo "-------------------------------------------------------------------"
+    echo "Prepend a message which includes a timestamp and a display of the "
+    echo "key's fingerprints and user IDs (and, also, optionally, and XMPP "
+    echo "account with an OTR fingerprint) to a copy of the public key. Then "
+    echo "a detached signature file of the public key with prepended message "
+    echo "is created, and these can be optionally uploaded to a remote "
+    echo "webserver, and/or stored locally in the user's home directory."
+    echo "If only the key ID is given, uploading will be left to user."; echo;
+    echo "------------------------------------------------------------------"
+    echo "<key ID>         the GPG key ID, i.e. \"2cdb8b35\""
+    echo;
+    echo "Options:"
+    echo;
+    echo "-u <user>@<host>:<dir>   upload files to webserver"
+    echo "-o <outfile>             output to file (default: $HOME/<keyID>.asc"
+    echo "-f <otr-fingerprint>     include otr fingerprint <otr-fingerprint>"
+    exit 1
+}
+
+## @param1 user's keyID
+## @param2 fake prompt string
+function prepend_gpg_fpr () {
+    echo "Creating message to prepend to public key, which will include both"
+    echo "a fingerprint and a timestamp ..."; echo;
+    FPR=`gpg --fingerprint $1` 
+    cat >> $1.prepend<<EOF
+
+$2 gpg --fingerprint $1
+$FPR
+
+$2 cat message
+EOF
+}
+
+## @param $1 user's keyID
+## @param $2 otrfpr (from options)
+function prepend_otr_fpr () {
+    localkeyid=$1
+    localotrfpr=$2
+    if [ "$localotrfpr" == "" ] ; then
+        echo "Include OTR fingerprints also? (Y/n): "
+        read yn
+        case $yn in 
+            n | N | no | No ) echo "Skipping OTR fingerprints..." && return ;;
+            * ) echo "Please find your OTR fingerprint from your XMPP/Jabber client, and enter the fingerprint: "
+                echo "(ex. \"f9b81df4ba310806b1513680246598a06fc08cdb\")"
+                read localotrfpr ;;
+        esac    
+    fi
+
+    if test -n $localotrfpr ; then
+        echo "Please enter the account name (ex. \"isislovecruft@jabber.ccc.de\") for which the given OTR fingerprint is valid: "
+        read otrname
+        cat >> $1.prepend<<EOF
+my xmpp/jabber account and OTR fingerprint are:
+
+   $otrname $localotrfpr
+
+EOF
+    else
+        return
+    fi
+}
+
+## @param $1 user's keyID
+## @param $2 sigfile
+## @param $3 fakeprompt
+function prepend_sig_location () {
+    RELATIVE=`date`
+    cat >> $1.prepend<<EOF
+the script which made this file is available here: http://⌘.ws/莨 
+and a signature of the complete contents of this file, including this
+EOF
+    ## include url in prepended message, regardless of uploading
+    echo
+    echo "Would you also like to include an online location to be specified"
+    echo "in the prepended message, so that others can retrieve your key from"
+    echo "that location in a more verifiable manner? (We won't upload anything"
+    echo "unless you specified a host option.)"; echo;
+    echo "Include online location in key message (Y/n):"
+    read yn
+    case $yn in 
+        n | N | no | No )
+            cat >> $1.prepend<<EOF
+message and the above fingerprint, should have been included with
+this key file as $2
+
+EOF
+            ;;
+        * ) echo "Specify the public web directory which the key will be hosted at, i.e. \"https://foo.bar/about/\" will mean the key will be stored at \"https://foo.bar/about/$1.pub.asc\" and the signature file at \"https://foo.bar/about/$1.pub.sig.asc\" :"
+            read url
+            cat >> $1.prepend<<EOF
+message and the above fingerprint, is available at:
+
+  $url$2
+
+EOF
+            ;;
+    esac
+    cat >> $1.prepend<<EOF
+
+the signature was made with my corresponding private key, and its 
+time stamp should be relatively close to...
+
+$3 date
+$RELATIVE
+
+
+EOF
+}
+
+## @param $1: user's keyID
+## @param $2: the outfile
+function add_prepend_and_key ()
+{
+    if test -r $1.prepend ; then
+        ## mv the prepend-message to the actual file
+        mv $1.prepend $2
+        ## export the public key
+        gpg -a -o $1.pub --export $1
+        ## and then add it to the actual file
+        cat $1.pub >> $2
+
+        if test -r $2 ; then
+            echo "Cleaning up temporary files ..."
+            rm $1.pub
+        else
+            echo "Error appending message to public key file. Exiting."
+            exit 1
+        fi
+    else
+        echo "Error finding prepend message. Exiting."
+        exit 1
+    fi
+}
+
+## @param $1: the outfile
+## @param $2: the sigfile
+function create_sig_file ()
+{
+    if test -r $1; then
+        echo "Creating signature file ..."
+        gpg -a -o $2 --detach-sign $1
+    else
+        echo "Error: could not read public key file"
+        exit 1
+    fi
+}
+
+if [[ "$#" == "0" ]] ; then
+    usage
+else
+    cd $HOME
+    upload_to=
+    outfile=
+    otrfpr=
+    fakeprompt=$USER"@"$HOSTNAME":~\$"
+
+    while getopts u:o:f: x; do
+        case $x in
+            u ) upload_to=$OPTARG;;
+            o ) outfile=$OPTARG;;
+            f ) otrfpr=$OPTARG;;
+            * ) usage;;
+        esac
+    done
+    shift $((OPTIND - 1))
+
+    keyid=$1            
+    if test -z $outfile ; then
+        outfile=$keyid".asc"
+        sigfile=$keyid".sig.asc"
+    else
+        outfile=$outfile
+        sigfile=$outfile".sig.asc"
+    fi
+
+    echo
+    echo "Exporting public key and prepending fingerprint and timestamp ..."
+    if ! test -r $1.prepend ; then
+        prepend_gpg_fpr $keyid $fakeprompt        
+        prepend_otr_fpr $keyid $otrfpr
+        prepend_sig_location $keyid $sigfile $fakeprompt
+    fi
+    add_prepend_and_key $keyid $outfile
+    create_sig_file $outfile $sigfile
+    echo; echo "Done!"
+
+    if [ "$upload_to" != "" ] ; then
+        echo; echo "Uploading to public web root ..."
+        scp $outfile $sigfile $upload_to
+        echo "Done!"
+    fi
+    echo "Key file with prepended message at $HOME/$outfile"
+    echo "Signature file at $HOME/$sigfile"
+    exit 0
+fi

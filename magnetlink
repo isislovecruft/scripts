@@ -1,0 +1,40 @@
+#!/bin/bash
+###############################################################################
+#
+# magnetlink
+# --------------
+# A utility to convert a magnet link to a .torrent file and add it to the 
+# watch directory so that rtorrent can find it.
+#
+# @author Isis Agora Lovecruft, 0x2cdb8b35 ;
+#     Max Gonzih, 
+#     blog.gonzih.org/blog/2012/02/17/how-to-use-magnet-links-with-rtorrent/
+# @date 21 August 2012
+# @version 0.0.1
+#______________________________________________________________________________
+# Changelog:
+###############################################################################
+
+## set your watch directory here:
+WATCH_DIRECTORY="$HOME/video/watch"
+
+#cd $WATCH_DIRECTORY
+#
+#[[ "$1" =~ xt=urn:btih:([^&/]+) ]] || echo "bad magnet link..." && \
+#    logger "magnetlink error: bad magnet link!" && exit 1 ;
+#
+#echo "d10:magnet-uri${#1}:${1}e" > "meta-${BASH_REMATCH[1]}.torrent" && \
+#    logger "magnetlink: link copied as torrent to watch directory" && \
+#    exit 0 ;
+
+cd $WATCH_DIRECTORY || exit
+[[ "$1" =~ xt=urn:btih:([^&/]+) ]] || exit
+hashh=${BASH_REMATCH[1]}
+if [[ "$1" =~ dn=([^&/]+) ]];then
+  filename=${BASH_REMATCH[1]}
+else
+  filename=$hashh
+fi
+fn="meta-"$filename".torrent"
+touch $fn
+echo "d10:magnet-uri${#1}:${1}e" | cat > $fn
