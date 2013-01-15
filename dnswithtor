@@ -113,8 +113,8 @@ function check_tor ()
         echo "Process for Tor not found ..."
         echo "Tor is not currently running ..."
         echo "Starting Tor ..."
-        if test -x /etc/init.d/unbound ; then
-            sudo /etc/init.d/unbound start
+        if test -x /etc/init.d/tor ; then
+            sudo /etc/init.d/tor start
         else
             echo "Could not find init script for Tor ..."
             echo "Exiting ..."
