@@ -252,7 +252,6 @@ server:
         hide-identity: yes
         hide-version: yes
         harden-glue: yes
-        harden-glue: yes
         ## because Tor only speaks TCP
         tcp-upstream: yes
 
