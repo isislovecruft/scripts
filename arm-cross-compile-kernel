@@ -1,0 +1,36 @@
+#!/bin/bash
+##############################################################################
+#
+# arm-cross-compile-kernel
+# ------------------------
+# Build a Debian kernel for ARM architectures.
+#
+# This will create packages with names such as
+# linux-image-3.2.9-dreamplug_0custom.20120313_armel.deb and
+# linux-headers-3.2.9-dreamplug_0custom.20120313_armel.deb which can be
+# installed with dpkg -i; after they have been installed, the uImage file can
+# be created on the target using something like this: 
+#    'mkimage -A arm -O linux -T kernel -C none -a 0x00008000 -e \
+#        0x00008000 -n Linux-3.2.9-dreamplug \
+#        -d /boot/vmlinuz-3.2.9-dreamplug uImage'
+# (where the mkimage program is from the package named uboot-mkimage or 
+# u-boot-tools).
+#
+# @author Isis Agora Lovecruft, 0x2cdb8b35
+# @date 11 October 2012
+# @version 0.0.1
+#-----------------------------------------------------------------------------
+# Changelog:
+##############################################################################
+
+
+PATH=/opt/arm-linux-gnueabi-tools/bin:$PATH
+export PATH
+day="`date +%Y%m%d`"
+make-kpkg --arch armel --cross-compile arm-linux-gnueabi- \
+    --revision=0custom.${day} --append-to-version=-dreamplug \
+    --config menuconfig configure
+CONCURRENCY_LEVEL="4" make-kpkg --arch armel --cross-compile \
+    arm-linux-gnueabi- --revision=0custom.${day} \
+    --append-to-version=-dreamplug \
+    --rootcmd fakeroot kernel_image kernel_headers
