@@ -1,0 +1,37 @@
+#!/bin/bash
+##############################################################################
+#
+# make_cross_compiler.sh
+# -------------------
+# Make an arm toolchain for building a dreamplug kernel.
+#
+# @author Isis Agora Lovecruft, 0x2cdb8b35
+# @date 11 October 2012
+# @version 0.0.1
+#-----------------------------------------------------------------------------
+# Changelog:
+##############################################################################
+
+
+mkdir /opt/arm-linux-gnueabi
+mkdir /opt/arm-linux-gnueabi-tools
+dpkg-deb -x libc6_2.13-27_armel.deb /opt/arm-linux-gnueabi
+dpkg-deb -x libc6-dev_2.13-27_armel.deb /opt/arm-linux-gnueabi
+dpkg-deb -x linux-libc-dev_3.2.9-1_armel.deb /opt/arm-linux-gnueabi
+(cd /opt/arm-linux-gnueabi/usr ; tar cf - *) | (cd /opt/arm-linux-gnueabi ; tar xf -)
+rm -rf /opt/arm-linux-gnueabi/usr
+ln -s . /opt/arm-linux-gnueabi/usr
+cd /tmp ; apt-get source binutils
+cd binutils-2.22
+./debian/rules patch
+mkdir /tmp/binutils-build
+cd /tmp/binutils-build
+/tmp/binutils-2.22/configure --target=arm-linux-gnueabi --prefix=/opt/arm-linux-gnueabi-tools --enable-shared --enable-plugins --with-sysroot=/opt/arm-linux-gnueabi
+make -j4 && make install
+cd /tmp ; apt-get source gcc-4.6
+cd gcc-4.6-4.6.3
+DEB_CROSS_NO_BIARCH=yes ./debian/rules patch
+mkdir /tmp/gcc-build
+cd /tmp/gcc-build
+/tmp/gcc-4.6-4.6.3/src/configure --target=arm-linux-gnueabi --prefix=/opt/arm-linux-gnueabi-tools --with-sysroot=/opt/arm-linux-gnueabi --enable-languages=c
+make -j4 && make install
