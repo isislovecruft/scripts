@@ -15,7 +15,8 @@
 ###############################################################################
 
 ## If you wish to set $LOCALTZ in this script, then set it here:
-LOCALTZ="America/Los_Angeles"
+#LOCALTZ="America/Los_Angeles"
+LOCALTZ="Europe/Berlin"
 
 function usage
 {
