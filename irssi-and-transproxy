@@ -1,0 +1,333 @@
+#!/bin/bash
+##############################################################################
+#
+# install-irssi
+# -------------------
+# Install irssi from source from the Debian git repository, to overcome the
+# bugs such as lack of TLS1/SSL3 support in irssi==0.8.15-4+b1, caused by
+# the switch from openssl-1.0.0e-2.1 to GnuTLS1.0.0/libssl1.0.0.
+#
+# @author Isis Agora Lovecruft, <isis@torproject.org> 0x2cdb8b35
+# @date 10 February 2013
+# @version 0.0.1
+##############################################################################
+
+[[ "$(id -u)" != 0 ]] || $(echo "Must be root. Exiting."; exit 1)
+
+## Irssi sources, debian patches, and dependencies
+irssi_svn=http://svn.irssi.org/repos/irssi/tags/r_0_8_15-rc1/
+irssi_debian=git://git.deb.at/pkg/irssi.git
+irssi_depends="libc6 libglib2.0-0 libncurses5 perl-base libssl1.0.0 "
+irssi_depends+="libtinfo5 perl "
+irssi_suggests="irssi-scripts "
+
+our_build_depends="quilt debhelper build-essential libperl-dev lynx hardening-includes hardening-wrapper gcc ncurses-dev "
+
+## Default locations for torrc file
+torrc=/etc/tor/torrc
+torrc_trans_port=9040
+torrc_dns_port=5353
+
+declare -A tor_configs=( ["VirtualAddrNetwork"]="10.192.0.0/10" 
+                         ["TransPort"]="127.0.0.1:9040 IsolateClientProtocol"
+                         ["DNSPort"]="5353"
+                         ["AutomapHostsOnResolve"]="1"
+                         ["AutomapHostExits"]=".onion,.exit" )
+
+
+cat<<EOF
+All TCP and DNS traffic for a specific user can be re-routed to only go
+through the Tor network. This setup for an anonymous user requires iptables,
+and is described at:
+https://trac.torproject.org/projects/tor/wiki/doc/TransparentProxy
+
+EOF
+read -ep"Should we create a new anonymous user? (y/N) " anon
+case $anon in
+    y|Y ) create_anon=true ;;
+    * ) create_anon=false ;;
+esac
+
+function do_create_anon () {
+    echo
+    read -p'What should the new user'"'"'s name be? (default: anon) ' user
+    if [[ "x$user" == "x" ]] ; then user=anon ; fi
+    sudo useradd -m -N $user    
+}
+
+if $create_anon ; then
+    do_create_anon
+    cat<<EOF
+
+Transproxying a user requires modifying your torrc file. A backup of your
+current setting will be made, and the following settings, if not already 
+set in the original, will be added to the new torrc:
+EOF
+    for config in "${!torrc_configs[@]}"; do
+        setting="${torrc_configs["$config"]}"
+        cat<<EOF
+$config $setting
+EOF
+    done
+    echo
+    read -p'Should we create the new torrc?: (Y/n) ' newrc
+    case $newrc in
+        n|N )
+            do_new_torrc=false
+            cat<<EOF
+
+Should we configure iptables rules (or generate a shell script) now, to 
+activate the transparent Tor proxy for the new anonymous user?
+EOF
+            read -p'Configure iptables? (Y/n)' confipt
+            case $confipt in
+                n|N ) do_iptables_rules=false ;;
+                * ) do_iptables_rules=true ;;
+            esac
+            ;;
+        * ) do_new_torrc=true ;;
+    esac
+
+    echo
+
+    if [ $do_iptables_rules ] || [ $do_new_torrc ] ; then
+        if $do_iptable_rules ; then cat<<EOF
+We need to read your torrc to ensure that we configure iptables correctly.
+EOF
+        fi
+        read -p"Please specify the path your torrc: (default: ${torrc}) " rc
+
+        if test -n "$rc" ; then torrc=$rc ; fi
+
+        if ! test -r "${torrc}" ; then 
+            echo 'Cannot read torrc...exiting.'; exit 1
+        fi
+
+        for config in "${!torrc_configs[@]}"; do
+            setting="${torrc_configs["$config"]}"
+            is_set=$(cat $torrc | ack -A 0 -B 0 ^$config | cut -d ' ' -f 2)
+            echo
+            if test -n "$is_set"; then
+                if $do_new_torrc ; then
+                    echo "${config} already set to ${is_set} in ${torrc}..."
+                    echo 'Saving found torrc setting for iptables use...'
+                fi
+                torrc_configs["$config"]="$is_set"
+            else
+                if $do_new_torrc ; then cat<<EOF
+Adding "${config} ${setting}" to ${torrc}...
+EOF
+                    echo "${config} ${setting}" | sudo tee -a $torrc
+                fi
+            fi
+        done
+
+        declare ipt_rules=(
+            "sudo iptables -t nat -I 1 OUTPUT -p tcp -m owner --uid-owner $user -m tcp -j REDIRECT --to-ports $torrc_transport"
+            "sudo iptables -t nat -I 2 OUTPUT -p udp -m owner --uid-owner $user -m udp --dport 53 -j REDIRECT --to-ports $torrc_dns_port"
+            "sudo iptables -t filter -I 1 OUTPUT -p tcp -m owner --uid-owner $user -m tcp --dport $torrc_trans_port -j ACCEPT"
+            "sudo iptables -t filter -I 2 OUTPUT -p udp -m owner --uid-owner $user -m udp --dport $torrc_dns_port -j ACCEPT"
+            "sudo iptables -t filter -I 3 OUTPUT -m owner --uid-owner $user -j LOG --log-prefix \"iptables: TransProxy: \" --log-level 7"
+            "sudo iptables -t filter -I 4 OUTPUT -m owner --uid-owner $user -j DROP" )
+
+        cat<<EOF
+We can insert the necessary iptables rule to the top of the OUTPUT chains
+now, and/or generate a shell script for inserting the rules in the user's
+home directory.
+EOF
+        read -p'Add new iptables rules to chains? (Y/n) ' doit
+        case $doit in
+            n|N ) echo 'Chill. We won'"'"'t mess with iptables now.' ;;
+            * ) for rule in "${ipt_rules[@]}"; do $($rule) ; done ;;
+        esac
+        read -p'Generate script for iptables rules? (Y/n) ' skid
+        case $skid in
+            n|N ) echo 'Skipping script generation.' ;;
+            * )
+                if ! test -r "${build_dir}/transproxy.iptables.sh"; then
+                    echo 'Creating iptable transproxy script...'
+                    cat>>${build_dir}/transproxy.iptables.sh<<EOF
+#!/bin/bash
+#
+# transproxy.iptables.sh
+# ----------------------
+# Insert Tor transproxy iptables rules to the top of the OUTPUT chains.
+#
+# @authors: Isis Agora Lovecruft, <isis@torproject.org> 0x2cdb8b35
+# @license: WTFPL
+#
+
+EOF
+                    for rl in "${ipt_rules[@]}"; do
+                        cat>>${build_dir}/transproxy.iptables.sh<<FIN
+$rl
+FIN
+                    done
+                    chmod +x ${build_dir}/transproxy.iptables.sh
+                else
+                    echo 'Transproxy iptables script already exists...'
+                fi ;;
+        esac
+    fi
+else
+    cat<<EOF
+Alright. Assuming we already have an anonymous user account. In which 
+user's home directory should we create a build directory for irssi?
+
+EOF
+    read -p'Which user'"'"'s home dir?: (default: anon) ' user
+    if [[ "x$user" == "x" ]] ; then user=anon ; fi
+fi
+
+read -p'Should we make a new directory for downloading sources to? (Y/n) ' ndir
+case $ndir in
+    n|N ) echo "Okay. Downloading to /home/${user} (or /home/${user}/code,"
+          echo "if it exists." ;;
+    * ) read -p"Name of new directory to create: " mkthisdir ;;
+esac
+
+echo 
+if test -d "/home/${user}/code" ; then
+    if test -n "$mkthisdir" ; then
+        build_dir=/home/${user}/code/${mkthisdir}
+    else
+        build_dir=/home/${user}/code
+    fi
+    echo "Found ${build_dir} directory, downloading sources there..."
+else
+    if test -n "$mkthisdir" ; then
+        build_dir=/home/${user}/${mkthisdir}
+    else
+        build_dir=/home/${user}
+    fi
+    echo "Downloading sources to ${build_dir}..."
+fi
+
+if ! test -d "$build_dir" ; then
+    sudo -u ${user} -H mkdir -p $build_dir
+fi
+
+cd $build_dir && \
+    echo "Obtaining irssi source from ${irssi_svn}..." && \
+    git svn clone $irssi_svn irssi && \
+    echo "Obtaining debian patches from ${irssi_debian}..." && \
+    git clone $irssi_debian irssi-debian
+
+echo 
+echo 'Testing for irssi'"'"'s dependencies...'
+irssi_depends_missing=""
+for depend in $irssi_depends ; do
+    if test -z "$(dpkg -l ${depend} | grep ii )" ; then
+        irssi_depends_missing+="$depend "
+    fi
+done
+if test -n "$irssi_depends_missing" ; then
+    for dep in $irssi_depends_missing ; do
+        echo ''
+        echo "Found missing dependency: ${dep}"
+        read -p"Install from package archives now? (Y/n) " choice
+        case $choice in
+            n|N ) echo "Skipping ${dep}..." ;;
+            * ) echo "Installing ${dep}..." ; sudo apt-get install $dep ;;
+        esac
+    done
+fi
+
+echo 'Testing for build helper dependencies...'
+our_depends_missing=""
+for mine in $our_build_depends ; do
+    if test -z "$(dpkg -l ${mine} | grep ii )" ; then
+        our_depends_missing+="$mine "
+    fi
+done
+if test -n "$our_depends_missing" ; then
+    for ours in $our_depends_missing ; do
+        echo ''
+        echo "Found missing dependency: ${ours}"
+        read -p"Install from package archives now? (Y/n) " choice
+        case $choice in
+            n|N ) echo "Skipping ${ours}..." ;;
+            * ) echo "Installing ${ours}..." ; sudo apt-get install $ours ;;
+        esac
+    done
+fi
+
+read -p"Should we build and configure irssi now? (y/N) " buildit
+case $buildit in
+    y|Y )
+        if test -d "${build_dir}/irssi" ; then
+            if test -d "${build_dir}/irssi/debian/patches" ; then
+                cd ${build_dir}/irssi && \
+                    quilt setup debian/patches/series && \
+                    quilt snapsnot && \
+                    quilt push
+            else
+                cat<<EOF
+
+The patch files are missing, or were not downloaded correctly...without them,
+irssi will not have TLS1/SSLv3 support.
+
+EOF
+                read -p'Should we continue building anyway? (y/N) ' grrr
+                case $grrr in
+                    y|Y ) echo 'Continuing irssi installation' ;;
+                    * )   echo 'Aborting...' & exit 1 ;;
+                esac
+            fi
+            cd ${build_dir}/irssi && \
+                export DEBEMAIL='isis@torproject.org' && \
+                export DEBFULLNAME='Isis Agora Lovecruft' && \
+                dpkg-buildpackage && \
+                cat<<EOF
+
+Build successful.
+
+EOF
+        fi
+        ## these work, but don't create binaries or tarballs:
+        ## to restore, put underneath 'export DEBFULLNAME=...'
+        # dh clean
+        # ./autogen.sh --with-socks --with-proxy --with-bot --enable-ipv6 --without-servertest --enable-perl --with-perl-lib=vendor && \
+        # dh build
+        if test -n "$irssi_suggests" ; then
+            for suggested in $irssi_suggests ; do
+                echo; echo "Irssi suggests installing ${suggested}..."
+                read -p'Install from packages archives now?: (y/N) ' yn
+                case $yn in
+                    y|Y ) sudo apt-get install --no-install-recommends ${suggested} ;;
+                    * ) echo "Ignoring suggestion ${suggested}..." ;;
+                esac
+            done
+        fi
+
+        if test -z "$(dpkg -l irssi-plugin-otr | grep ii)" ; then
+            cat<<EOF
+
+The Off-The-Record (OTR) protocol is a cryptographic scheme which allows for 
+secure synchronous communications, and is available as an irssi plugin.
+EOF
+            read -p"Should we install irssi-plugins-otr now?: (Y/n) " otr
+            echo 
+            case $otr in
+                n|N ) echo 'Alright, fine. Let the NSA read your chats.' ;;
+                * )
+                    echo 'Awesome. Installing OTR support...'
+                    sudo apt-get install irssi-plugin-otr ;;
+            esac
+        else
+            cat<<EOF
+
+I see you've already got the OTR plugin for irssi installed. I'd give you my 
+number and ask you out for a drink, but -- like any good cypherpunk -- I don't
+have a working telephone.
+
+EOF
+        fi
+        ;;
+    * ) echo "Skipping build." ;;
+esac
+
+cat<<EOF
+I think we're done here. Roger and out.
+
+EOF
