@@ -1,0 +1,20 @@
+#!/bin/bash
+##############################################################################
+#
+# get_ssl_fingerprint
+# -------------------
+# Get a cert fingerprint after pulling the cert down.
+#
+# @author Isis Agora Lovecruft, 0x2cdb8b35
+# @date 22 February 2013
+# @version 0.0.1
+##############################################################################
+
+if [[ "$#" == "2" ]] ; then
+    host=$1
+    port=$2
+    openssl s_client -connect ${host}:${port} < /dev/null 2>/dev/null | openssl x509 -fingerprint -noout -in /dev/stdin
+else
+    echo "Usage: $0 <host> <port>"
+fi
+
