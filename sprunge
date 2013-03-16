@@ -1,0 +1,21 @@
+#!/bin/bash
+###############################################################################
+#
+# sprunge
+# --------------
+# Wraps Sprunge, a commandline pastebin tool, with SOCKS4a and a User-Agent,
+# so that it can be called from Mutt.
+#
+# Put it somewhere on your $PATH and use like this:
+#
+#   $ echo "test" | sprunge
+#   $ cat test.txt | sprunge
+#
+# @author Isis Agora Lovecruft, 0x2cdb8b35
+# @date 25 May 2012
+# @version 0.0.1
+#______________________________________________________________________________
+# Changelog:
+###############################################################################
+
+curl --socks4a 127.0.0.1:59050 -A 'Mozilla/5.0 (Windows NT 6.1; WOW64; rv:11.0) Gecko/20100201 Firefox/12.0' -F 'sprunge=<-' http://sprunge.us $1
