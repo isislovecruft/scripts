@@ -1,0 +1,228 @@
+#!/bin/bash
+##############################################################################
+#
+# check-commit-signature
+# ----------------------
+# A server-side update git hook for checking the GPG signature of a pushed
+# commit.
+#
+# To enable this hook, rename this file to "update".
+#
+# Config
+# ------
+# hooks.allowunsigned
+#   This boolean sets whether unsigned tags, and merges with unsigned commits
+#   into master, are allowed. By default, they are not allowed.
+# hooks.allowcommitsonmaster
+#   This boolean sets whether non-merge commits are allowed on master. By
+#   default, these are not allowed.
+# hooks.allowhotfixonmaster
+#   The boolean sets whether branches beginning with hotfix-* are allowed on
+#   master. NOT YET IMPLEMENTED. CURRENTLY IGNORED.
+# hooks.allowunannotated
+#   This boolean sets whether unannotated tags will be allowed into the
+#   repository.  By default they won't be.
+# hooks.allowdeletetag
+#   This boolean sets whether deleting tags will be allowed in the
+#   repository.  By default they won't be.
+# hooks.allowmodifytag
+#   This boolean sets whether a tag may be modified after creation. By default
+#   it won't be.
+# hooks.allowdeletebranch
+#   This boolean sets whether deleting branches will be allowed in the
+#   repository.  By default they won't be.
+# hooks.denycreatebranch
+#   This boolean sets whether remotely creating branches will be denied
+#   in the repository.  By default this is allowed.
+#
+# @author Isis Agora Lovecruft, 0x2cdb8b35
+# @date 10 March 2013
+# @version 0.0.1
+##############################################################################
+
+## server config
+##################
+allowunsigned=$(git config --bool hooks.allowunsigned)
+allowcommitsonmaster=$(git config --bool hooks.allowcommitsonmaster)
+allowhotfixonmaster=$(git config --bool hooks.allowhotfixonmaster)
+allowunannotated=$(git config --bool hooks.allowunannotated)
+allowdeletebranch=$(git config --bool hooks.allowdeletebranch)
+denycreatebranch=$(git config --bool hooks.denycreatebranch)
+allowdeletetag=$(git config --bool hooks.allowdeletetag)
+allowmodifytag=$(git config --bool hooks.allowmodifytag)
+
+
+## committers and their GPG keys should go in this array:
+declare -A conspirators
+conspirators['aagbsn']='D876C9F6'
+conspirators['hellais']='150FE210'
+conspirators['ioerror']='4193A197'
+conspirators['isis']='2CDB8B35'
+
+ref=$1
+rev_old=$2
+rev_new=$3
+span=$(git rev-list ^rev_old rev_new)
+
+## check that the old and new revision objects are sane
+git rev-parse --verify $rev_new 1>&2
+test -eq "$?" 0 || exit $?
+git rev-parse --verify $rev_old 1>&2
+zero="0000000000000000000000000000000000000000"
+if [ "$newrev" = "$zero" ]; then
+        newrev_type=delete
+else
+        newrev_type=$(git cat-file -t $newrev)
+fi
+test -eq "$?" 0 || exit $?
+
+## get the long keyids:
+declare -A trusted_keys
+for roustabout in "${!conspirators[@]}"; do
+    shortid="{conspirators["$roustabout"]}"
+    longid=$(gpg --list-keys --with-colon $shortid | \
+        grep ^pub | \
+        cut -d ':' -f 5 )
+    trusted_keys["$roustabout"]=$longid
+
+rev_cur=$rev_old
+for commit in $span ; do
+    ## commit type:
+    zero="0000000000000000000000000000000000000000"
+    merge=$(git rev-list -n 1 --merges $rev_cur..$commit)
+    if [ "$commit" = "$zero" ]; then
+        newrev_type=delete
+    else
+        if test -n "$merge"; then
+            newrev_type=merge
+        else
+            newrev_type=$(git cat-file -t $rev_new)
+        fi
+    fi
+
+    case "$ref" in
+        refs/heads/master)
+            case "$newrev_type" in
+                commit)
+                    ## do not allow commits directly onto master
+                    if [ "$allowcommitsonmaster" != "true" ]; then
+                        echo "*** The non-merge commit $commit is not allowed to be pushed to master" >&2
+                        echo "*** Branch master can only take merge commits from branches develop/* and release-* " >&2
+                        exit 1
+                    fi
+                    ;;
+                merge)
+                    ## only allow merges from release-* and develop/*
+                    is_from_develop=$(git branch --contains $commit | grep devel )
+                    is_from_release=$(git branch --contains $commit | grep release )
+                    if test -z "$is_from_develop" -a -z "$is_from_release"; then
+                        echo "*** Branch master only takes merge commits originating from develop/* or release-* branches" >&2
+                        exit 1
+                    else
+                        if test -n "$(git log --show-signature $head | grep "Good signature")" ; then
+                        echo "*** We don't currently have a way to check GPG signatures on merge commits" >&2
+                        echo "*** Thank torvalds for that" >&2
+                        ;;
+                    fi
+                    ;;
+                delete)
+                    # delete branch
+                    if [ "$allowdeletebranch" != "true" ]; then
+                        echo "*** Deleting master is not allowed in this repository" >&2
+                        exit 1
+                    fi
+                    ;;
+                *)
+                    ## kill it with fire
+                    echo "*** Branch master only takes merge commits originating from develop/* or release-* branches" >&2
+                    exit 1
+                    ;;
+                esac
+            ;;
+        *)
+            ;;
+    esac
+    $rev_cur=$commit
+done
+
+case "$ref","$newrev_type" in
+    refs/tags/*,commit)
+        # un-annotated tag
+        short_ref=${ref##refs/tags/}
+        if [ "$allowunannotated" != "true" ]; then
+            echo "*** The un-annotated tag, $short_ref, is not allowed in this repository" >&2
+            echo "*** Use 'git tag [ -a | -s ]' for tags you want to propagate." >&2
+            exit 1
+        fi
+        ;;
+    refs/tags/*,delete)
+        # delete tag
+        if [ "$allowdeletetag" != "true" ]; then
+            echo "*** Deleting a tag is not allowed in this repository" >&2
+            exit 1
+        fi
+        ;;
+    refs/tags/*,tag)
+        # annotated tag
+        if [ "$allowmodifytag" != "true" ] && git rev-parse $ref > /dev/null 2>&1
+        then
+            echo "*** Tag '$ref' already exists." >&2
+            echo "*** Modifying a tag is not allowed in this repository." >&2
+            exit 1
+        else
+            ## if it's a tag, check that it's GPG signed
+
+            ## we have to grep for 'gpg:' first, otherwise any tag message
+            ## could simply include the words "Good Signature" and pass the
+            ## test, same goes for the keyids
+
+            is_signed=$(git tag --verify $ref | grep gpg: | grep "Good Signature")
+            authorized=false
+
+            for keyid in "${trusted_keys[@]"; do
+                ## xxx do tags include the longid?
+                if test -n "$(git tag --verify $ref | grep gpg: | grep $keyid )"; then
+                    authorized=true
+                fi
+            done
+
+            short_ref=${ref##refs/tags/}
+            if [[ "$authorized" == "false" ; then
+                echo "*** Rejecting tag $short_ref due to lack of a valid GPG signature" >&2
+                echo "*** Authors and keys allowed to create tags on this repo:" >&2
+                for author in "${!conspirators[@]}"; do
+                    key="${conspirators["$author"]}"
+                    echo "*** $author $key " >&2
+                done
+            fi
+        fi
+        ;;
+    refs/heads/*,commit)
+        # branch
+        if [ "$oldrev" = "$zero" -a "$denycreatebranch" = "true" ]; then
+            echo "*** Creating a branch is not allowed in this repository" >&2
+            exit 1
+        fi
+        ;;
+    refs/remotes/*,commit)
+        # tracking branch
+        ;;
+    refs/remotes/*,delete)
+        # delete tracking branch
+        if [ "$allowdeletebranch" != "true" ]; then
+            echo "*** Deleting a tracking branch is not allowed in this repository" >&2
+            exit 1
+        fi
+        ;;
+    *)
+        # Anything else (is there anything else?)
+        echo "*** Update hook: unknown type of update to ref $ref of type $newrev_type" >&2
+        exit 1
+        ;;
+esac
+
+# --- Finished
+exit 0
+
+
+#if test -eq "$(git rev-parse --symbolic-full-name $rev_new )" "$commit")
