@@ -68,10 +68,13 @@ rev_new=$3
 span=$(git rev-list ^"$rev_old" "$rev_new")
 
 ## check that the old and new revision objects are sane
-git rev-parse --verify $rev_new 1>&2
-test -eq "$?" 0 || exit $?
-git rev-parse --verify $rev_old 1>&2
-test -eq "$?" 0 || exit $?
+if [[ `git rev-parse --verify "$rev_new"` != *[!0-9A-Fa-f]* ; then
+    exit 1
+fi
+
+if [[ `git rev-parse --verify "$rev_old"` != *[!0-9A-Fa-f]* ; then
+    exit 1
+fi
 
 ## a commit with a hash full of zeros is a deletion of a ref
 zero="0000000000000000000000000000000000000000"
