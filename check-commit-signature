@@ -51,13 +51,31 @@ allowunannotated=$(git config --bool hooks.allowunannotated)
 allowdeletetag=$(git config --bool hooks.allowdeletetag)
 allowmodifytag=$(git config --bool hooks.allowmodifytag)
 
+## committers and their signing GPG key fingerprints should go in the
+## ${collaborators} array:
+##
+## we hard code the fingerprint to protect against the possibility of the gpg
+## on the remote git server updating the keys (if it is configured to do so,
+## and also configured to use short keyids) and pulling in a colliding key from
+## a keyserver.
+##
+declare -A collaborators
+collaborators['aagbsn']='91D4 3A5B 1016 CEB6 D352  65AE 2C4B 239D D876 C9F6'
+collaborators['hellais']='46E5 EF37 DE26 4EA6 8DCF  53EA E3A2 1297 150F E210'
+collaborators['ioerror']='228F AD20 3DE9 AE7D 84E2  5265 CF9A 6F91 4193 A197'
+collaborators['isis']='0A6A 58A1 4B59 46AB DE18  E207 A3AD B67A 2CDB 8B35'
 
-## committers and their GPG keys should go in this array:
-declare -A conspirators
-conspirators['aagbsn']='91D4 3A5B 1016 CEB6 D352  65AE 2C4B 239D D876 C9F6'
-conspirators['hellais']='46E5 EF37 DE26 4EA6 8DCF  53EA E3A2 1297 150F E210'
-conspirators['ioerror']='228F AD20 3DE9 AE7D 84E2  5265 CF9A 6F91 4193 A197'
-conspirators['isis']='0A6A 58A1 4B59 46AB DE18  E207 A3AD B67A 2CDB 8B35'
+## get the keyids from the fingerprints above:
+declare -A trusted_keys
+for collab in "${!collaborators[@]}"; do
+    fpr="${collaborators["$collab"]}"
+    shortid=$(echo "$fpr" | cut -d ' ' --output-delimiter='' -f 10,11 )
+    longid=$(gpg --list-keys --with-colon "$shortid" | grep ^pub | cut -d ':' -f 5 )
+    ## git log --show-signature currently will only give us the shortid
+    trusted_keys["$collab"]="$shortid"
+    ## XXX if someday git will give us a way to get the longid of the signing
+    ## key, we should change to:
+    #trusted_keys["$collab"]="$longid"
 
 ## $1 is the git ref which is being revised
 ## $2 is the last HEAD
