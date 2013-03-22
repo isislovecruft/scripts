@@ -45,9 +45,9 @@
 allowunsignedcommits=$(git config --bool hooks.allowunsignedcommits)
 allowcommitsonmaster=$(git config --bool hooks.allowcommitsonmaster)
 allowhotfixonmaster=$(git config --bool hooks.allowhotfixonmaster)
-allowunannotated=$(git config --bool hooks.allowunannotated)
 allowdeletebranch=$(git config --bool hooks.allowdeletebranch)
 denycreatebranch=$(git config --bool hooks.denycreatebranch)
+allowunannotated=$(git config --bool hooks.allowunannotated)
 allowdeletetag=$(git config --bool hooks.allowdeletetag)
 allowmodifytag=$(git config --bool hooks.allowmodifytag)
 
