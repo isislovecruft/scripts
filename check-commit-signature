@@ -71,13 +71,15 @@ span=$(git rev-list ^"$rev_old" "$rev_new")
 git rev-parse --verify $rev_new 1>&2
 test -eq "$?" 0 || exit $?
 git rev-parse --verify $rev_old 1>&2
+test -eq "$?" 0 || exit $?
+
+## a commit with a hash full of zeros is a deletion of a ref
 zero="0000000000000000000000000000000000000000"
 if [ "$newrev" = "$zero" ]; then
         newrev_type=delete
 else
         newrev_type=$(git cat-file -t $newrev)
 fi
-test -eq "$?" 0 || exit $?
 
 ## get the long keyids:
 declare -A trusted_keys
