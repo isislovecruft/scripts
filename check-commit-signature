@@ -78,10 +78,10 @@ fi
 
 ## a commit with a hash full of zeros is a deletion of a ref
 zero="0000000000000000000000000000000000000000"
-if [ "$newrev" = "$zero" ]; then
+if [ "$rev_new" = "$zero" ]; then
     newrev_type=delete
 else
-    newrev_type=$(git cat-file -t $newrev)
+    newrev_type=$(git cat-file -t $rev_new)
 fi
 
 ## get the long keyids:
