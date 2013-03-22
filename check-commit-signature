@@ -10,7 +10,7 @@
 #
 # Config
 # ------
-# hooks.allowunsigned
+# hooks.allowunsignedcommits
 #   This boolean sets whether unsigned tags, and merges with unsigned commits
 #   into master, are allowed. By default, they are not allowed.
 # hooks.allowcommitsonmaster
@@ -42,7 +42,7 @@
 
 ## server config
 ##################
-allowunsigned=$(git config --bool hooks.allowunsigned)
+allowunsignedcommits=$(git config --bool hooks.allowunsignedcommits)
 allowcommitsonmaster=$(git config --bool hooks.allowcommitsonmaster)
 allowhotfixonmaster=$(git config --bool hooks.allowhotfixonmaster)
 allowunannotated=$(git config --bool hooks.allowunannotated)
