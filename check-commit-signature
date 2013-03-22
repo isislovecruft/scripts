@@ -65,7 +65,7 @@ conspirators['isis']='0A6A 58A1 4B59 46AB DE18  E207 A3AD B67A 2CDB 8B35'
 ref=$1
 rev_old=$2
 rev_new=$3
-span=$(git rev-list ^rev_old rev_new)
+span=$(git rev-list ^"$rev_old" "$rev_new")
 
 ## check that the old and new revision objects are sane
 git rev-parse --verify $rev_new 1>&2
