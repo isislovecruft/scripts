@@ -54,11 +54,14 @@ allowmodifytag=$(git config --bool hooks.allowmodifytag)
 
 ## committers and their GPG keys should go in this array:
 declare -A conspirators
-conspirators['aagbsn']='D876C9F6'
-conspirators['hellais']='150FE210'
-conspirators['ioerror']='4193A197'
-conspirators['isis']='2CDB8B35'
+conspirators['aagbsn']='91D4 3A5B 1016 CEB6 D352  65AE 2C4B 239D D876 C9F6'
+conspirators['hellais']='46E5 EF37 DE26 4EA6 8DCF  53EA E3A2 1297 150F E210'
+conspirators['ioerror']='228F AD20 3DE9 AE7D 84E2  5265 CF9A 6F91 4193 A197'
+conspirators['isis']='0A6A 58A1 4B59 46AB DE18  E207 A3AD B67A 2CDB 8B35'
 
+## $1 is the git ref which is being revised
+## $2 is the last HEAD
+## $3 is the HEAD commit of the series of commits being applied
 ref=$1
 rev_old=$2
 rev_new=$3
