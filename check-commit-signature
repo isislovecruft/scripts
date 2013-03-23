@@ -116,24 +116,60 @@ for commit in $span ; do
         fi
     fi
 
-    case "$ref" in
-        refs/heads/master)
-            case "$newrev_type" in
-                commit)
-                    ## do not allow commits directly onto master
-                    if [ "$allowcommitsonmaster" != "true" ]; then
-                        echo "*** The non-merge commit $commit is not allowed to be pushed to master" >&2
-                        echo "*** Branch master can only take merge commits from branches develop/* and release-* " >&2
-                        exit 1
-                    fi
-                    ;;
-                merge)
-                    ## only allow merges from release-* and develop/*
-                    is_from_develop=$(git branch --contains $commit | grep devel )
-                    is_from_release=$(git branch --contains $commit | grep release )
-                    if test -z "$is_from_develop" -a -z "$is_from_release"; then
-                        echo "*** Branch master only takes merge commits originating from develop/* or release-* branches" >&2
-                        exit 1
+    ## the following returns non-null if $rev_cur is originating from branches
+    ## beginning with the name "devel":
+    is_from_develop=$(git branch --contains "$commit" | grep devel )
+
+    ## the following returns non-null if $rev_cur is originating from branches
+    ## beginning with the name "release":
+    is_from_release=$(git branch --contains "$commit" | grep release )
+
+    ## the following returns non-null if $rev_cur is a signed tag:
+    is_signed_tag=$(git tag --verify "$ref" | grep gpg: )
+
+    ## the following returns non-null if $rev_cur has a signature, and gpg reports
+    ## the signature is good:
+    has_good_sig=$(git show --show-signature "$commit" | grep "Good signature")
+
+    ## the following extracts the signing keyid (either short or long) from the
+    ## signature on $rev_cur:
+    signing_keyid=$(git show --show-signature "$commit" | \
+        grep -o -E "key ID [0-9A-Fa-f]{8,16}" | \
+        cut -d ' ' -f 3 )
+
+    ## the following is the short reference name for tags, i.e. 'v0.1.2' in
+    ## lieu of 'refs/tags/v0.1.2':
+    short_ref=${ref##refs/tags/}
+
+    case "$ref","$commit_type" in
+        refs/heads/master,commit)
+            ## do not allow commits directly onto master
+            if [ "$allowcommitsonmaster" != "true" ]; then
+                echo "*** The non-merge commit $commit is not allowed to be pushed to master" >&2
+                echo "*** Branch master can only take merge commits from branches develop/* and release-* " >&2
+                exit 1
+            fi
+            ;;
+        refs/heads/master,merge)
+            ## only allow merges to master from release-* and develop/*
+            if test -z "$is_from_develop" -a -z "$is_from_release"; then
+                echo "*** Branch master only takes merge commits originating from develop/* or release-* branches" >&2
+                exit 1
+            else
+                allowed_keyid=false
+                if test -n "$has_good_sig"; then
+                    if test -n "$signing_keyid"; then
+                        for collab in "${!trusted_keys[@]}"; do
+                            ## XXX the $keyid is currently only a short key id
+                            ## because git doesn't give us a way to ask for a
+                            ## long keyid
+                            keyid="${trusted_keys["$collab"]}"
+                            if [[ "$signing_keyid" == "$keyid" ]]; then
+                                if [[ $(gpg --fingerprint $signing_keyid | grep -o -E "Key fingerprint = [[0-9A-Fa-f]{4}[:space:]+]{12}") == "${collaborators["$collab"]}"
+                                allowed_keyid=true
+                                echo "*** Good signature on commit $commit made by $collab with signing key $signing_key " >&2
+                            fi
+                        done
                     else
                         if test -n "$(git log --show-signature $head | grep "Good signature")" ; then
                         echo "*** We don't currently have a way to check GPG signatures on merge commits" >&2
