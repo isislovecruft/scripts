@@ -85,35 +85,25 @@ rev_old=$2
 rev_new=$3
 span=$(git rev-list ^"$rev_old" "$rev_new")
 
-## check that the old and new revision objects are sane
-if [[ `git rev-parse --verify "$rev_new"` != *[!0-9A-Fa-f]* ; then
-    exit 1
-fi
-
-if [[ `git rev-parse --verify "$rev_old"` != *[!0-9A-Fa-f]* ; then
-    exit 1
-fi
-
-## a commit with a hash full of zeros is a deletion of a ref
-zero="0000000000000000000000000000000000000000"
-if [ "$rev_new" = "$zero" ]; then
-    newrev_type=delete
-else
-    newrev_type=$(git cat-file -t $rev_new)
-fi
-
-## get the long keyids:
-declare -A trusted_keys
-for roustabout in "${!conspirators[@]}"; do
-    shortid="{conspirators["$roustabout"]}"
-    longid=$(gpg --list-keys --with-colon $shortid | \
-        grep ^pub | \
-        cut -d ':' -f 5 )
-    trusted_keys["$roustabout"]=$longid
-
-rev_cur=$rev_old
+## for all the commits in the series, check the type of the commit against the
+## commit directly before it:
+rev_cur=$rev_old                   ## set the current rev to the previous HEAD
 for commit in $span ; do
-    ## commit type:
+
+    ## check that the current revison object is a hexidecimal hash of length 40
+    check_rev=$(git rev-parse --verify "$commit")
+    if [[ "$check_rev" != *[!0-9A-Fa-f]* ]]; then
+        echo "*** Commit hash for commit $commit is not hex" >&2
+        exit 1
+    fi
+
+    if [[ "${#check_rev}" != 40 ]]; then
+        echo "*** Commit hash for commit $commit has bad length of ${#check_rev}" >&2
+        exit 1
+    fi
+
+    ## get the commit type of the current rev:
+    ## a commit with a hash full of zeros is a deletion of a ref
     zero="0000000000000000000000000000000000000000"
     merge=$(git rev-list -n 1 --merges $rev_cur..$commit)
     if [ "$commit" = "$zero" ]; then
