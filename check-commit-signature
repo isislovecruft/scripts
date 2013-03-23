@@ -171,110 +171,106 @@ for commit in $span ; do
                             fi
                         done
                     else
-                        if test -n "$(git log --show-signature $head | grep "Good signature")" ; then
-                        echo "*** We don't currently have a way to check GPG signatures on merge commits" >&2
-                        echo "*** Thank torvalds for that" >&2
-                        ;;
+                        echo "*** Found a signature on commit $commit but could not find signing keyid" >&2
                     fi
-                    ;;
-                delete)
-                    # delete branch
-                    if [ "$allowdeletebranch" != "true" ]; then
-                        echo "*** Deleting master is not allowed in this repository" >&2
-                        exit 1
+                else
+                    echo "*** Missing or bad signature on commit $commit" >&2
+                fi
+
+                if ! $allowed_keyid ; then
+                    echo "*** Merges to master can only be made from branches with names beginning with release-* or develop/*" >&2
+                    echo "*** and must be signed with one of the following keys:" >&2
+                    for key in "${trusted_keys[@]}"; do
+                        echo "*** $key" >&2
+                    done
+                fi
+            fi
+            ;;
+        refs/heads/master,delete)
+            # delete branch
+            if [ "$allowdeletebranch" != "true" ]; then
+                echo "*** Deleting master is not allowed in this repository" >&2
+                exit 1
+            fi
+            ;;
+        refs/heads/master,*)
+            ## kill it with fire
+            echo "*** Branch master only takes merge commits originating from develop/* or release-* branches" >&2
+            exit 1
+            ;;
+        refs/tags/*,commit)
+            ## un-annotated tag
+            if [ "$allowunannotated" != "true" ]; then
+                echo "*** The un-annotated tag, ${short_ref}, is not allowed in this repository" >&2
+                echo "*** Use 'git tag [ -a | -s ]' for tags you want to propagate." >&2
+                exit 1
+            fi
+            ;;
+        refs/tags/*,delete)
+            ## delete tag
+            if [ "$allowdeletetag" != "true" ]; then
+                echo "*** Deleting a tag is not allowed in this repository" >&2
+                exit 1
+            fi
+            ;;
+        refs/tags/*,tag)
+            ## annotated tag
+            if [ "$allowmodifytag" != "true" ] && git rev-parse "$ref" > /dev/null 2>&1 ; then
+                echo "*** Tag $shortref already exists." >&2
+                echo "*** Modifying a tag is not allowed in this repository." >&2
+                exit 1
+            else
+                ## if it's a tag, check that it's GPG signed
+
+                ## we have to grep for 'gpg:' first, otherwise any tag message
+                ## could simply include the words "Good Signature" and pass the
+                ## test, same goes for the keyids
+
+                allowed_keyid=false
+                for keyid in "${trusted_keys[@]"; do
+                    if test -n "$(git tag --verify $ref | grep gpg: | grep $keyid )"; then
+                        allowed_keyid=true
                     fi
-                    ;;
-                *)
-                    ## kill it with fire
-                    echo "*** Branch master only takes merge commits originating from develop/* or release-* branches" >&2
+                done
+
+                if [[ "$authorized" == "false" ]]; then
+                    echo "*** Rejecting tag $short_ref due to lack of a valid GPG signature" >&2
+                    echo "*** Authors and keys allowed to create tags on this repo:" >&2
+                    for collab in "${!collaborators[@]}"; do
+                        keyid="${collaborators["$collab"]}"
+                        echo "*** $collab $key " >&2
+                    done
                     exit 1
-                    ;;
-                esac
+                fi
+            fi
+            ;;
+        refs/heads/*,commit)
+            ## commit on a non-master branch
+            if [ "$rev_old" = "$zero" -a "$denycreatebranch" = "true" ]; then
+                echo "*** Creating a branch is not allowed in this repository" >&2
+                exit 1
+            fi
+            ;;
+        refs/remotes/*,commit)
+            ## tracking branch
+            ;;
+        refs/remotes/*,delete)
+            ## delete tracking branch
+            if [ "$allowdeletebranch" != "true" ]; then
+                echo "*** Deleting a tracking branch is not allowed in this repository" >&2
+                exit 1
+            fi
             ;;
         *)
+            ## Anything else (is there anything else?)
+            echo "*** Update hook: unknown type of update to ref $ref of type $commit_type" >&2
+            exit 1
             ;;
     esac
+    ## increment the current rev to the $commit we just checked:
     $rev_cur=$commit
 done
-
-case "$ref","$newrev_type" in
-    refs/tags/*,commit)
-        # un-annotated tag
-        short_ref=${ref##refs/tags/}
-        if [ "$allowunannotated" != "true" ]; then
-            echo "*** The un-annotated tag, $short_ref, is not allowed in this repository" >&2
-            echo "*** Use 'git tag [ -a | -s ]' for tags you want to propagate." >&2
-            exit 1
-        fi
-        ;;
-    refs/tags/*,delete)
-        # delete tag
-        if [ "$allowdeletetag" != "true" ]; then
-            echo "*** Deleting a tag is not allowed in this repository" >&2
-            exit 1
-        fi
-        ;;
-    refs/tags/*,tag)
-        # annotated tag
-        if [ "$allowmodifytag" != "true" ] && git rev-parse $ref > /dev/null 2>&1
-        then
-            echo "*** Tag '$ref' already exists." >&2
-            echo "*** Modifying a tag is not allowed in this repository." >&2
-            exit 1
-        else
-            ## if it's a tag, check that it's GPG signed
-
-            ## we have to grep for 'gpg:' first, otherwise any tag message
-            ## could simply include the words "Good Signature" and pass the
-            ## test, same goes for the keyids
-
-            is_signed=$(git tag --verify $ref | grep gpg: | grep "Good Signature")
-            authorized=false
-
-            for keyid in "${trusted_keys[@]"; do
-                ## xxx do tags include the longid?
-                if test -n "$(git tag --verify $ref | grep gpg: | grep $keyid )"; then
-                    authorized=true
-                fi
-            done
-
-            short_ref=${ref##refs/tags/}
-            if [[ "$authorized" == "false" ; then
-                echo "*** Rejecting tag $short_ref due to lack of a valid GPG signature" >&2
-                echo "*** Authors and keys allowed to create tags on this repo:" >&2
-                for author in "${!conspirators[@]}"; do
-                    key="${conspirators["$author"]}"
-                    echo "*** $author $key " >&2
-                done
-            fi
-        fi
-        ;;
-    refs/heads/*,commit)
-        # branch
-        if [ "$oldrev" = "$zero" -a "$denycreatebranch" = "true" ]; then
-            echo "*** Creating a branch is not allowed in this repository" >&2
-            exit 1
-        fi
-        ;;
-    refs/remotes/*,commit)
-        # tracking branch
-        ;;
-    refs/remotes/*,delete)
-        # delete tracking branch
-        if [ "$allowdeletebranch" != "true" ]; then
-            echo "*** Deleting a tracking branch is not allowed in this repository" >&2
-            exit 1
-        fi
-        ;;
-    *)
-        # Anything else (is there anything else?)
-        echo "*** Update hook: unknown type of update to ref $ref of type $newrev_type" >&2
-        exit 1
-        ;;
-esac
 
 # --- Finished
 exit 0
 
-
-#if test -eq "$(git rev-parse --symbolic-full-name $rev_new )" "$commit")
