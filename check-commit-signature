@@ -105,14 +105,14 @@ for commit in $span ; do
     ## get the commit type of the current rev:
     ## a commit with a hash full of zeros is a deletion of a ref
     zero="0000000000000000000000000000000000000000"
-    merge=$(git rev-list -n 1 --merges $rev_cur..$commit)
+    merge=$(git rev-list -n 1 --merges "$rev_cur".."$commit")
     if [ "$commit" = "$zero" ]; then
-        newrev_type=delete
+        commit_type=delete
     else
         if test -n "$merge"; then
-            newrev_type=merge
+            commit_type=merge
         else
-            newrev_type=$(git cat-file -t $rev_new)
+            commit_type=$(git cat-file -t "$commit")
         fi
     fi
 
