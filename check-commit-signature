@@ -129,13 +129,16 @@ for commit in $span ; do
 
     ## the following returns non-null if $rev_cur has a signature, and gpg reports
     ## the signature is good:
-    has_good_sig=$(git show --show-signature "$commit" | grep "Good signature")
+    has_good_sig=$(git log --format=%H --show-signature "$commit" | grep "Good signature")
 
     ## the following extracts the signing keyid (either short or long) from the
     ## signature on $rev_cur:
     signing_keyid=$(git show --show-signature "$commit" | \
         grep -o -E "key ID [0-9A-Fa-f]{8,16}" | \
         cut -d ' ' -f 3 )
+
+    fpr_signing_keyid= $(gpg --fingerprint $signing_keyid | \
+        grep -o -E "([0-9A-F]{4}[[:space:]]{0,2}){10}")
 
     ## the following is the short reference name for tags, i.e. 'v0.1.2' in
     ## lieu of 'refs/tags/v0.1.2':
@@ -165,9 +168,13 @@ for commit in $span ; do
                             ## long keyid
                             keyid="${trusted_keys["$collab"]}"
                             if [[ "$signing_keyid" == "$keyid" ]]; then
-                                if [[ $(gpg --fingerprint $signing_keyid | grep -o -E "Key fingerprint = [[0-9A-Fa-f]{4}[:space:]+]{12}") == "${collaborators["$collab"]}"
-                                allowed_keyid=true
-                                echo "*** Good signature on commit $commit made by $collab with signing key $signing_key " >&2
+                                ## check that the fingerprint of the key that
+                                ## gave us a good signature matches the
+                                ## hardcoded ones:
+                                if [[ "$fpr_signing_keyid" == "${collaborators["$collab"]}" ]]; then
+                                    allowed_keyid=true
+                                    echo "*** Good signature on commit $commit made by $collab with signing key $signing_key " >&2
+                                fi
                             fi
                         done
                     else
