@@ -70,12 +70,16 @@ declare -A trusted_keys
 for collab in "${!collaborators[@]}"; do
     fpr="${collaborators["$collab"]}"
     shortid=$(echo "$fpr" | cut -d ' ' --output-delimiter='' -f 10,11 )
-    longid=$(gpg --list-keys --with-colon "$shortid" | grep ^pub | cut -d ':' -f 5 )
-    ## git log --show-signature currently will only give us the shortid
     trusted_keys["$collab"]="$shortid"
-    ## XXX if someday git will give us a way to get the longid of the signing
+
+    ## git log --show-signature currently will only give us the shortid
+    ##
+    ## if someday git will give us a way to get the longid of the signing
     ## key, we should change to:
+    #longid=$(gpg --list-keys --with-colon "$shortid" | \
+    #    grep ^pub | cut -d ':' -f 5 )
     #trusted_keys["$collab"]="$longid"
+done
 
 ## $1 is the git ref which is being revised
 ## $2 is the last HEAD
