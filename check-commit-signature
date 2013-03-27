@@ -87,12 +87,12 @@ done
 ref=$1
 rev_old=$2
 rev_new=$3
-span=$(git rev-list ^"$rev_old" "$rev_new")
+span=$(git rev-list ^$rev_old $rev_new)
 
 ## for all the commits in the series, check the type of the commit against the
 ## commit directly before it:
 rev_cur=$rev_old                   ## set the current rev to the previous HEAD
-for commit in $span ; do
+for commit in "$span" ; do
 
     ## check that the current revison object is a hexidecimal hash of length 40
     check_rev=$(git rev-parse --verify "$commit")
@@ -101,8 +101,9 @@ for commit in $span ; do
         exit 1
     fi
 
-    if [[ "${#check_rev}" != 40 ]]; then
-        echo "*** Commit hash for commit $commit has bad length of ${#check_rev}" >&2
+    hash_len="${#check_rev}"
+    if [[ "$hash_len" != 40 ]]; then
+        echo "*** Commit hash for commit $commit has bad length of $hash_len " >&2
         exit 1
     fi
 
