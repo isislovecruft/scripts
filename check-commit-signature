@@ -165,26 +165,22 @@ for commit in "$span" ; do
                 exit 1
             else
                 allowed_keyid=false
-                if test -n "$has_good_sig"; then
-                    if test -n "$signing_keyid"; then
-                        for collab in "${!trusted_keys[@]}"; do
-                            ## XXX the $keyid is currently only a short key id
-                            ## because git doesn't give us a way to ask for a
-                            ## long keyid
-                            keyid="${trusted_keys["$collab"]}"
-                            if [[ "$signing_keyid" == "$keyid" ]]; then
-                                ## check that the fingerprint of the key that
-                                ## gave us a good signature matches the
-                                ## hardcoded ones:
-                                if [[ "$fpr_signing_keyid" == "${collaborators["$collab"]}" ]]; then
-                                    allowed_keyid=true
-                                    echo "*** Good signature on commit $commit made by $collab with signing key $signing_key " >&2
-                                fi
+                if test -n "$has_good_sig" -a -n "$signing_keyid" ; then
+                    for collab in "${!trusted_keys[@]}"; do
+                        ## XXX the $keyid is currently only a short key id
+                        ## because git doesn't give us a way to ask for a
+                        ## long keyid
+                        keyid="${trusted_keys["$collab"]}"
+                        if [[ "$signing_keyid" == "$keyid" ]]; then
+                            ## check that the fingerprint of the key that
+                            ## gave us a good signature matches the
+                            ## hardcoded ones:
+                            if [[ "$fpr_signing_keyid" == "${collaborators["$collab"]}" ]]; then
+                                allowed_keyid=true
+                                echo "*** Good signature on commit $commit made by $collab with signing key $signing_key " >&2
                             fi
-                        done
-                    else
-                        echo "*** Found a signature on commit $commit but could not find signing keyid" >&2
-                    fi
+                        fi
+                    done
                 else
                     echo "*** Missing or bad signature on commit $commit" >&2
                 fi
