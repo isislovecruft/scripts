@@ -271,14 +271,10 @@ for commit in "$span" ; do
             ;;
         *)
             ## Anything else (is there anything else?)
-            echo "*** Update hook: unknown type of update to ref $ref of type $commit_type" >&2
+            echo "*** Unknown type of update to ref $ref of type $commit_type " >&2
             exit 1
             ;;
     esac
     ## increment the current rev to the $commit we just checked:
-    $rev_cur=$commit
+    rev_cur=$commit
 done
-
-# --- Finished
-exit 0
-
