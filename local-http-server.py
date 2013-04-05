@@ -34,7 +34,7 @@ parser.add_option('-p', '--port', dest='port', default=8080,
 parser.add_option('-a', '--address', dest='addr', default='127.0.0.1',
                   help="Local IP address to listen on")
 parser.add_option('-d', '--dir', dest='dir', default='.',
-                  help='Local directory to use as root directory of webserver')
+                  help='[Not Implemented] Local directory to use as root directory of webserver')
 
 
 if __name__ == "__main__":
@@ -43,6 +43,9 @@ if __name__ == "__main__":
         sys.exit(1)
     else:
         (options, args) = parser.parse_args()
+
+        if options.dir:
+            print "WARNING! The local directory option is not implemented."
 
         try:
            IPAddress(options.addr)
