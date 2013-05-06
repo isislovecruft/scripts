@@ -1,0 +1,246 @@
+#!/bin/bash
+#_____________________________________________________________________________
+# Git Nowhere
+#-----------------------------------------------------------------------------
+#
+# Use: Run as "$ . ./gitdate" before "$ git commit" to manually set
+# the date to UTC in order to obscure timezone-based geodata tracking.
+#
+# If you would always like your timestamps to be obscured for a specific
+# project, then you'll need to either source this file BEFORE EACH COMMIT
+# while committing code. You *cannot* set it as a git hook, because git
+# hooks open child shell processes which are unable to affect the parent
+# shell's environment. To make this easier, however, you could set an
+# alias in whichever shell you use:
+#
+#    alias gc=". /path/to/gitdate && git commit -v "
+#
+# NOTE: If you use "$ git commit -S -v" to create GnuPG signatures for your
+#       git commits, the timestamp on the GnuPG signature will *NOT* match
+#       the git AuthorDate and CommitDate lines, giving away that you are
+#       lying. It would also be suspicious looking if you customarily sign
+#       your commits, and signature(s) were inexplicably missing.
+#
+# :authors: Isis Lovecuft <isis@patternsinthevoid.net> 0xA3ADB67A2CDB8B35
+# :version: 0.0.4
+# :copyright: (c) 2012-2013 Isis Lovecruft
+# :license: AGPLv3, see https://www.gnu.org/licenses/agpl-3.0.txt
+#
+# v0.0.4: Fix so that timezones east of UTC shift backwards.
+#         Add better date string parsing and some other fixes.
+# v0.0.3: Also changes the months and years, because that would suck if your
+#         commits were accidentally made last year
+# v0.0.2: Changes the days too
+# v0.0.1: Changes the hours
+#_____________________________________________________________________________
+
+## Uncomment for debugging:
+#set -x --
+
+## Git uses the system time settings through mktime().  Do a "$ git log" to see
+## the timezone offset for your system.  This script gets your timezone offset
+## by doing '$ date +"%z"'. If these two values are different, or for some
+## reason you would like to manually specify the offset between timezones to
+## change, then you can set this shell environment variable:
+##
+##     TIMEOFFSET=-0400
+##
+## Which would mean that your current timestamps were made in the UTC-0400
+## timezone (i.e. 'America/New_York'), and they will be modified by adding four
+## hours to change them into UTC.
+
+#TIMEOFFSET=-0400
+
+## git stores datestrings in the form: Sun Aug 19 08:34:12 2012 -0400
+## date uses:                          Mon May  6 21:00:18 UTC 2013
+
+DAY=$(date +"%a")
+MONTH=$(date +"%b")
+DATE=$(date +"%d")
+HOUR=$(date +"%H")
+MINSEC=$(date +"%M:%S")
+YEAR=$(date +"%Y")
+TIMEZONE=$(date +"%z")
+
+for mnth in Jan Mar May Jul Aug Oct Dec ; do
+    if [[ "$mnth" = "$MONTH" ]]; then LONG_MONTH=true ; fi
+done
+
+TIMEOFFSET=${TIMEOFFSET:=$TIMEZONE}
+TIMEOFFSET=${TIMEOFFSET%%00}
+if [[ "${TIMEOFFSET:0:1}" = '-' ]] ; then
+    TIMEOFFSET=${TIMEOFFSET:1}
+    IS_WEST=true
+elif [[ "${TIMEOFFSET:0:1}" = '+' ]] ; then
+    TIMEOFFSET=${TIMEOFFSET:1}
+    IS_EAST=true
+else
+    echo
+fi
+
+## 'let' requires the leading zero stripped
+if [[ "${TIMEOFFSET:0:1}" = '0' ]] ; then
+    TIMEOFFSET=${TIMEOFFSET:1}
+fi
+
+if test "$IS_WEST" ; then
+    let SPILLOVER=24-TIMEOFFSET
+
+    if [ "$HOUR" -lt "$SPILLOVER" ]; then
+        let HOUR+=TIMEOFFSET
+    else
+        let TILMIDNIGHT=24-HOUR
+        let HOUR=TIMEOFFSET-TILMIDNIGHT
+        FALSEDAWN=true
+    fi
+
+    # If the hour is one digit, prepend a zero.
+    if [ "${#HOUR}" -eq "1" ]; then
+        HOUR=$(printf "%02d" $HOUR)
+    fi
+
+    # If it is tomorrow in UTC, make sure we increment the day.
+    if test "$FALSEDAWN" ; then
+        if [ "$DAY" = "Mon" ]; then NEXTDAY=$(echo "Tue") ;
+        elif [ "$DAY" = "Tue" ]; then NEXTDAY=$(echo "Wed") ;
+        elif [ "$DAY" = "Wed" ]; then NEXTDAY=$(echo "Thu") ;
+        elif [ "$DAY" = "Thu" ]; then NEXTDAY=$(echo "Fri") ;
+        elif [ "$DAY" = "Fri" ]; then NEXTDAY=$(echo "Sat") ;
+        elif [ "$DAY" = "Sat" ]; then NEXTDAY=$(echo "Sun") ;
+        elif [ "$DAY" = "Sun" ]; then NEXTDAY=$(echo "Mon") ;
+        fi
+        DAY=$NEXTDAY
+
+        if test "$LONG_MONTH" ; then
+            if [[ "$DATE" -lt "31" ]]; then let DATE+=1 ;
+            elif [[ "$DATE" -eq "31" ]]; then
+                if [[ "$MONTH" = "Jan" ]]; then NEXTMONTH=$(echo "Feb") ;
+                elif [[ "$MONTH" = "Mar" ]]; then NEXTMONTH=$(echo "Apr") ;
+                elif [[ "$MONTH" = "May" ]]; then NEXTMONTH=$(echo "Jun") ;
+                elif [[ "$MONTH" = "Jul" ]]; then NEXTMONTH=$(echo "Aug") ;
+                elif [[ "$MONTH" = "Aug" ]]; then NEXTMONTH=$(echo "Sep") ;
+                elif [[ "$MONTH" = "Oct" ]]; then NEXTMONTH=$(echo "Nov") ;
+                elif [[ "$MONTH" = "Dec" ]]; then
+                    NEXTMONTH=$(echo "Jan")
+                    let YEAR+=1
+                fi
+                DATE=1
+            fi
+        elif [[ "$MONTH" = "Feb" ]] && [[ "$DATE" -lt "28" ]]; then
+            let DATE+=1
+        elif [[ "$MONTH" = "Feb" ]] && [[ "$DATE" -eq "28" ]]; then
+            NEXTMONTH=$(echo "Mar")
+            DATE=1
+        else
+            if [[ "$DATE" -lt "30" ]]; then let DATE+=1 ;
+            elif [[ "$DATE" -eq "30" ]]; then
+                if [[ "$MONTH" = "Apr" ]]; then NEXTMONTH=$(echo "May") ;
+                elif [[ "$MONTH" = "Jun" ]]; then NEXTMONTH=$(echo "Jul") ;
+                elif [[ "$MONTH" = "Sep" ]]; then NEXTMONTH=$(echo "Oct") ;
+                elif [[ "$MONTH" = "Nov" ]]; then NEXTMONTH=$(echo "Dec") ;
+                fi
+                DATE=1
+            fi
+        fi
+    fi
+    if [[ -n "$NEXTMONTH" ]]; then
+        MONTH=$NEXTMONTH
+    fi
+
+elif test "$IS_EAST" ; then
+    let SPILLOVER=24-TIMEOFFSET
+    let SPILLOVER=24-SPILLOVER
+
+    if [ "$HOUR" -lt "$SPILLOVER" ]; then
+        MAKE_YESTERDAY=true
+    fi
+
+    let HOUR=HOUR-TIMEOFFSET
+
+    # If the hour is one digit, prepend a zero.
+    if [ "${#HOUR}" -eq "1" ]; then
+        HOUR=$(printf "%02d" "$HOUR")
+    fi
+
+    # If it is yesterday in UTC, make sure we decrement the day.
+    if test "$MAKE_YESTERDAY" ; then
+        if [ "$DAY" = "Mon" ]; then LASTDAY=$(echo "Sun") ;
+        elif [ "$DAY" = "Tue" ]; then LASTDAY=$(echo "Mon") ;
+        elif [ "$DAY" = "Wed" ]; then LASTDAY=$(echo "Tue") ;
+        elif [ "$DAY" = "Thu" ]; then LASTDAY=$(echo "Wed") ;
+        elif [ "$DAY" = "Fri" ]; then LASTDAY=$(echo "Thu") ;
+        elif [ "$DAY" = "Sat" ]; then LASTDAY=$(echo "Fri") ;
+        elif [ "$DAY" = "Sun" ]; then LASTDAY=$(echo "Sat") ;
+        fi
+        DAY=$LASTDAY
+
+        if $LONG_MONTH ; then
+            if [[ "$DATE" -eq "1" ]]; then
+                if [[ "$MONTH" = "Mar" ]]; then
+                    LASTMONTH=$(echo "Feb")
+                    DATE=28
+                fi
+                if [[ "$MONTH" = "Jan" ]]; then
+                    LASTMONTH=$(echo "Dec") ;
+                    let YEAR=YEAR-1
+                elif [[ "$MONTH" = "May" ]]; then LASTMONTH=$(echo "Apr") ;
+                elif [[ "$MONTH" = "Jul" ]]; then LASTMONTH=$(echo "Jun") ;
+                elif [[ "$MONTH" = "Aug" ]]; then LASTMONTH=$(echo "Jul") ;
+                elif [[ "$MONTH" = "Oct" ]]; then LASTMONTH=$(echo "Sep") ;
+                elif [[ "$MONTH" = "Dec" ]]; then LASTMONTH=$(echo "Nov") ;
+                fi
+                DATE=30
+            else
+                let DATE=DATE-1
+            fi
+        else
+            if [[ "$DATE" -eq "1" ]]; then
+                if [[ "$MONTH" = "Feb" ]]; then LASTMONTH=$(echo "Jan") ;
+                elif [[ "$MONTH" = "Apr" ]]; then LASTMONTH=$(echo "Mar") ;
+                elif [[ "$MONTH" = "Jun" ]]; then LASTMONTH=$(echo "May") ;
+                elif [[ "$MONTH" = "Sep" ]]; then LASTMONTH=$(echo "Aug") ;
+                elif [[ "$MONTH" = "Nov" ]]; then LASTMONTH=$(echo "Oct") ;
+                fi
+                DATE=31
+            else
+                let DATE=DATE-1
+            fi
+        fi
+    fi
+    if [[ -n "$LASTMONTH" ]]; then
+        MONTH=$LASTMONTH
+    fi
+fi
+
+export GIT_AUTHOR_DATE=$(echo "$DAY $MONTH $DATE $HOUR:$MINSEC $YEAR +0000")
+export GIT_COMMITTER_DATE=$GIT_AUTHOR_DATE
+printf "Exported the following variable into the current shell:\n"
+printf "GIT_AUTHOR_DATE=%s\nGIT_COMMITTER_DATE=%s\n" \
+    "$GIT_AUTHOR_DATE" "$GIT_COMMITTER_DATE"
+
+unset DAY
+unset MONTH
+unset DATE
+unset HOUR
+unset MINSEC
+unset YEAR
+unset TIMEZONE
+
+unset IS_EAST
+unset IS_WEST
+unset LONG_MONTH
+unset TIMEOFFSET
+unset SPILLOVER
+
+unset FALSEDAWN
+unset TILMIDNIGHT
+unset NEXTDAY
+unset NEXTMONTH
+
+unset MAKE_YESTERDAY
+unset LASTDAY
+unset LASTMONTH
+
+## If debugging was enabled at the top, make sure it's off when we return
+## to a normal shell:
+#set +x --
