@@ -1,0 +1,47 @@
+#!/bin/bash
+##############################################################################
+#
+# verify-riseup-server-fingerprints.sh
+# -------------------
+# Download the SSL cerificates for *.riseup.net and check their fingerprints.
+#
+# @author Isis Agora Lovecruft, 0xa3adb67a2cdb8b35
+# @date 19 May 2013
+# @version 0.0.1
+##############################################################################
+
+#CERTHTML='https://help.riseup.net/en/certificates#verify-these-instructions'
+CERTHTML='https://help.riseup.net/en/signed-certificate-fingerprints'
+RISEUP_GPG_FPR=4E0791268F7C67EABE88F1B03043E2B7139A768E
+KEYSERVER='hkp://keys.mayfirst.org'
+MAIN_CERT='riseup.net'
+STATUS_CERT='status.riseup.net'
+
+printf "Obtaining signed list of server fingerprints from:\n\t%s..." $CERTHTML
+wget -q -O - $CERTHTML | \
+    sed -nr '/(-){5}(BEGIN PGP SIGNED MESSAGE){1}(-){5}/,/(-){5}(END PGP SIGNATURE){1}(-){5}/p' | \
+    sed -e :a -e 's/<[^>]*>//g;/</N;//ba' > riseup-fpr.sig
+
+#printf "\n\nRequesting an updated copy of Riseup's GPG key, with fingerprint"
+#printf "\n\t%s" $RISEUP_GPG_FPR
+#printf "\nfrom the keyserver at %s ...\n\n" $KEYSERVER
+## update our copy of riseup's GPG key:
+gpg --keyid-format long --keyserver-options 'no-include-revoked no-verbose' \
+    --keyserver $KEYSERVER --recv-key $RISEUP_GPG_FPR >&/dev/null
+
+printf "\n\nChecking the signature on the downloaded list..."
+printf "\nYou should see a line which starts with: "
+printf "\n\t\"gpg: Good signature \"\n\n"
+## check the signature on the message
+gpg --verify-options 'show-uid-validity show-notations' \
+    --verify riseup-fpr.sig
+
+cat riseup-fpr.sig | grep -B3 -a1 -Ee 'SHA-1 fingerprint'
+
+printf "\n\nDownloading the certificate for $MAIN_CERT ..."
+printf "\nThe certificate for $MAIN_CERT has fingerprint:\n"
+openssl s_client -connect ${MAIN_CERT}:443 < /dev/null 2>/dev/null | openssl x509 -fingerprint -noout -in /dev/stdin
+
+printf "\nDownloading the certificate for $STATUS_CERT ..."
+printf "\nThe certificate for $STATUS_CERT has fingerprint:\n"
+openssl s_client -connect ${STATUS_CERT}:443 < /dev/null 2>/dev/null | openssl x509 -fingerprint -noout -in /dev/stdin
