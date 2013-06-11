@@ -17,43 +17,67 @@
 #       mailserver.
 #
 #       If your mailserver is crappily configured, and include an
-#       "X-Originating-IP" header or something similar, then this will hide
-#       your IP from that.
+#       "X-Originating-IP" header or something similar, then this will obscure
+#       your real IP.
 #
 #       Pretty much the only purpose of this script is to hide from passive
 #       observers on your local network that you are connecting to a certain
 #       mailserver.
 #
-# @author Isis Agora Lovecruft, 0x2cdb8b35
+# @author Isis Agora Lovecruft, 0xa3adb67a2cdb8b35
 # @date 13 May 2012
-# @version 0.0.1
+# @version 0.0.3
 #
 ###############################################################################
 
-## set this to your Tor SocksPort:
-SOCKS_PORT=9050
+## Directory where your mailconfigs are stored:
+MAILRC=$HOME/.mailrc
 
-## set these to the address and port of your mailserver:
+## Set this to your Tor SocksPort:
+SOCKSPORT=9050
+
+## Set these to the IP address (or FQDN) and port of your mailserver:
 MAILSERVER_FQDN="mailserver.com"
 MAILSERVER_PORT=465
+MAILSERVER_PEM_CERT=$MAILRC/certs/mailserver.com.pem
 
-## YOU SHOULDN'T NEED TO CHANGE ANY OF THE FOLLOWING VARIABLES:
 ## The "Account" stanza in your msmtp config that you wish to use:
 MSMTP_ACCOUNT="default"
-LOG_FILE="${HOME}/.mailwithtor.log"
-LOCK_FILE="${HOME}/.mailwithtor-lockfile"
+
+## YOU SHOULDN'T NEED TO CHANGE ANY OF THE FOLLOWING VARIABLES:
+##----------------------------------------------------------------
+LOG_FILE="${MAILRC}/mailwithtor.log"
+LOCK_FILE="${MAILRC}/mailwithtor-lockfile"
 ## Port for socat to pipe incoming connections to its own SOCKS server:
 SOCAT_LISTEN_PORT=2525
 
+## Read the private settings file to override previous variables:
+test -r "${MAILRC}/mailwithtor.private" && source ${MAILRC}/mailwithtor.private
+
+## USING BEFORE STARTING MUTT (least buggiest):
+## --------------------------------------------
 ## If you're calling this from commandline before starting mutt, uncomment the
-## following line and use "$ mailwithtor &":
+## following line and use like so:
+##     $ ./mailwithtor &
+##     $ mutt
 
-sudo socat -d -d -d -lu -L ${LOCK_FILE} -lf ${LOG_FILE} TCP4-LISTEN:2525,fork SOCKS4A:localhost:$MAILSERVER_FQDN:$MAILSERVER_PORT,socksport=$SOCKS_PORT,socksuser=""
+sudo socat -d -d -d -lu -L ${LOCK_FILE} -lf ${LOG_FILE} TCP4-LISTEN:$SOCAT_LISTEN_PORT,fork SOCKS4A:localhost:$MAILSERVER_FQDN:$MAILSERVER_PORT,socksport=$SOCKS_PORT,socksuser=""
 
-## If you're setting "set sendmail='/path/to/mailwithtor'", then 
-## uncomment the following lines: 
-## NOTE: this is broken. specifically the getting-the-passphrase-from-the-sudo-
-## prompt part.
-#sudo %?p?--passphrase-fd 0? socat -d -d -d -lu -L $HOME/.mailrc/$LOCK_FILE -lf $HOME/.mailrc/$LOG_FILE TCP4-LISTEN:2525,fork SOCKS4A:localhost:$MAILSERVER_FQDN:$MAILSERVER_PORT,socksport=$SOCKSPORT,socksuser="" & /usr/bin/msmtp -a $MSMTP_ACCOUNT
+## If you're calling this from commandline before starting mutt, and you also
+## wish to use SSL to connect to the server, uncomment the next line instead 
+## and call with "$ mailwithtor &":
+##
+## NOTE: Buggy. Sometimes fails.
+
+#sudo socat -d -d -d -lu -L ${LOCK_FILE} -lf ${LOG_FILE} OPENSSL-LISTEN:$SOCAT_LISTEN_PORT,method=TLSv1,verify=1,cafile=$MAILSERVER_PEM_CERT,fork SOCK4a:localhost:$MAILSERVER_FQDN:$MAILSERVER_PORT,socksport=$SOCKSPORT,socksuser=""
+
+## USING FROM WITHIN MUTT (so many bugs.):
+## --------------------------------------------
+## If you're setting "set sendmail='/path/to/mailwithtor'", then uncomment the
+## following lines:
+##
+## NOTE: This is BROKEN. Specifically the getting-the-passphrase-from-the-sudo-
+## prompt part, from inside mutt.
+
+#sudo %?p?--passphrase-fd 0? socat -d -d -d -lu -L ${LOCK_FILE} -lf ${LOG_FILE} TCP4-LISTEN:$SOCAT_LISTEN_PORT,fork SOCKS4A:localhost:$MAILSERVER_FQDN:$MAILSERVER_PORT,socksport=$SOCKSPORT,socksuser="" & /usr/bin/msmtp -a $MSMTP_ACCOUNT
 #/usr/bin/msmtp -a default $1 $2 $3 $4 $5 $6 $7 $8
-
