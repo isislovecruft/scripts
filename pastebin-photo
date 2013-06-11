@@ -1,0 +1,61 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+"""
+ pastebin-photo
+ --------------------
+ Share a photo by pastebin'ing the base64 de-/en- coded version of it.
+
+ :authors: Isis Agora Lovecruft, 0xa3adb67a2cdb8b35
+ :license: AGPLv3
+ :date:    2011-01-04
+ :version: 0.0.3
+"""
+
+from functools import wraps
+from urllib2 import base64
+
+import sys
+
+
+def dencode(oldfile, newfile):
+    """
+    Take each line in the file containing the original image and base64 encode
+    or decode it and then write to another file.
+    """
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args):
+            with open(oldfile) as fh:
+                raw = fh.read(1073741824) ## limit to 1GB either direction
+                with open(newfile, 'a+') as nf:
+                    def wrapped(line):
+                        return func(line)
+                    nf.write(wrapped(raw))
+            return
+        return wrapper
+    return decorator
+
+if __name__ == "__main__":
+    
+    if len(sys.argv) == 4:
+        old = sys.argv[2]
+        new = sys.argv[3]
+
+        @dencode(old, new)
+        def encode(line):
+            return base64.b64encode(line)
+
+        @dencode(old, new)
+        def decode(line):
+            return base64.b64decode(line)
+
+        decode(old, new) if sys.argv[1] == "-d" else encode(old, new)
+    else:
+        use = """Usage: {p} [-d|-e] <old file> <new file>
+
+Examples:
+$ {p} -e original.jpg base64.txt   (to encode)
+$ {p} -d base64.txt new.jpg        (to decode)
+""".format(p=sys.argv[0])
+
+        raise SystemExit(use)
