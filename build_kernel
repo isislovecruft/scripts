@@ -60,7 +60,7 @@ REV=1
 ## branch.
 KVER=
 
-## Architecture to build for. Defaults to the output of 
+## Architecture to build for. Defaults to the output of
 ## `dpkg --print-archictecture`.
 KPKG_ARCH=
 
@@ -177,7 +177,7 @@ function main()
 
     ## Uncomment to use all flags in hardening-wrapper.
     ## see https://wiki.debian.org/HardeningWalkthrough
-    export DEB_BUILD_MAINT_OPTIONS = hardening=+all    
+    export DEB_BUILD_MAINT_OPTIONS = hardening=+all
 
     export CONCURRENCY_LEVEL
     export APPEND_TO_VERSION
@@ -220,13 +220,13 @@ function main()
 # ## Just in case
 # update-initramfs -k $KVER$KREV -c
 # update-grub
-# ## When you have booted to the TOI enabled kernel 
+# ## When you have booted to the TOI enabled kernel
 # ## you can read the swap file location by issuing
 # ##   $ cat /sys/power/tuxonice/swap/headerlocations
-# ## You will get the exact resume line that you will 
-# ## have to provide as kernel boot parameter (starting 
+# ## You will get the exact resume line that you will
+# ## have to provide as kernel boot parameter (starting
 # ## with resume=) e.g.
-# ## For swapfile `/var/swap`, 
+# ## For swapfile `/var/swap`,
 # ## use resume=swap:/dev/sda5:0x503a400.
 
 
