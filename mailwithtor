@@ -3,11 +3,11 @@
 #
 # mailwithtor
 # -----------
-# A simple socat script to start a local SOCKS4a server to connect msmtp and 
+# A simple socat script to start a local SOCKS4a server to connect msmtp and
 # Tor.
 #
-# Usage: 
-#       $ ./mailwithtor & 
+# Usage:
+#       $ ./mailwithtor &
 #       $ mutt
 #
 # Note: This uses Tor between you and your mailserver. This means:
@@ -39,7 +39,6 @@ SOCKSPORT=9050
 ## Set these to the IP address (or FQDN) and port of your mailserver:
 MAILSERVER_FQDN="mailserver.com"
 MAILSERVER_PORT=465
-MAILSERVER_PEM_CERT=$MAILRC/certs/mailserver.com.pem
 
 ## The "Account" stanza in your msmtp config that you wish to use:
 MSMTP_ACCOUNT="default"
@@ -48,11 +47,27 @@ MSMTP_ACCOUNT="default"
 ##----------------------------------------------------------------
 LOG_FILE="${MAILRC}/mailwithtor.log"
 LOCK_FILE="${MAILRC}/mailwithtor-lockfile"
+
 ## Port for socat to pipe incoming connections to its own SOCKS server:
 SOCAT_LISTEN_PORT=2525
 
 ## Read the private settings file to override previous variables:
 test -r "${MAILRC}/mailwithtor.private" && source ${MAILRC}/mailwithtor.private
+
+# MAILWITHTORPID=$(pgrep -u "$USER" mailwithtor)
+#
+# if test -z "$MAILWITHTORPID" ; then
+#    if test -e "$HOME/.mailrc/$LOCK_FILE" ; then
+#        sudo rm -f $HOME/.mailrc/$LOCK_FILE &> $HOME/.mailrc/$LOG_FILE
+#    fi
+# else
+#    while [[ "$MAILWITHTORPID" != "" ]] ; do
+#        sudo kill -9 "$MAILWITHTORPID" &> $HOME/.mailrc/$LOG_FILE
+#    done
+#    if test -f "$HOME/.mailrc/$LOCK_FILE" ; then
+#        sudo rm -f $HOME/.mailrc/$LOCK_FILE &> $HOME/.mailrc/$LOG_FILE
+#    fi
+# fi
 
 ## USING BEFORE STARTING MUTT (least buggiest):
 ## --------------------------------------------
@@ -61,23 +76,22 @@ test -r "${MAILRC}/mailwithtor.private" && source ${MAILRC}/mailwithtor.private
 ##     $ ./mailwithtor &
 ##     $ mutt
 
-sudo socat -d -d -d -lu -L ${LOCK_FILE} -lf ${LOG_FILE} TCP4-LISTEN:$SOCAT_LISTEN_PORT,fork SOCKS4A:localhost:$MAILSERVER_FQDN:$MAILSERVER_PORT,socksport=$SOCKS_PORT,socksuser=""
+sudo socat -d -d -d -lu -L $MAILRC/$LOCK_FILE -lf $MAILRC/$LOG_FILE TCP4-LISTEN:$SOCAT_LISTEN_PORT,fork SOCKS4A:localhost:$MAILSERVER_FQDN:$MAILSERVER_PORT,socksport=$SOCKSPORT,socksuser=""
 
 ## If you're calling this from commandline before starting mutt, and you also
-## wish to use SSL to connect to the server, uncomment the next line instead 
+## wish to use SSL to connect to the server, uncomment the next line instead
 ## and call with "$ mailwithtor &":
 ##
 ## NOTE: Buggy. Sometimes fails.
 
-#sudo socat -d -d -d -lu -L ${LOCK_FILE} -lf ${LOG_FILE} OPENSSL-LISTEN:$SOCAT_LISTEN_PORT,method=TLSv1,verify=1,cafile=$MAILSERVER_PEM_CERT,fork SOCK4a:localhost:$MAILSERVER_FQDN:$MAILSERVER_PORT,socksport=$SOCKSPORT,socksuser=""
+#sudo socat -d -d -d -lu -L $HOME/.mailrc/$LOCK_FILE -lf $HOME/.mailrc/$LOG_FILE OPENSSL-LISTEN:2525,method=TLSv1,verify=1,cafile=$HOME/.mailrc/CA/AddTrust_External_Root.pem,fork SOCK4a:localhost:$MAILSERVER_FQDN:$MAILSERVER_PORT,socksport=$SOCKSPORT,socksuser=""
 
-## USING FROM WITHIN MUTT (so many bugs.):
-## --------------------------------------------
-## If you're setting "set sendmail='/path/to/mailwithtor'", then uncomment the
-## following lines:
+## If you're setting "set sendmail='$HOME/path/to/mailwithtor'", then
+## uncomment the following lines:
 ##
 ## NOTE: This is BROKEN. Specifically the getting-the-passphrase-from-the-sudo-
 ## prompt part, from inside mutt.
 
 #sudo %?p?--passphrase-fd 0? socat -d -d -d -lu -L ${LOCK_FILE} -lf ${LOG_FILE} TCP4-LISTEN:$SOCAT_LISTEN_PORT,fork SOCKS4A:localhost:$MAILSERVER_FQDN:$MAILSERVER_PORT,socksport=$SOCKSPORT,socksuser="" & /usr/bin/msmtp -a $MSMTP_ACCOUNT
 #/usr/bin/msmtp -a default $1 $2 $3 $4 $5 $6 $7 $8
+
