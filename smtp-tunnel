@@ -1,0 +1,65 @@
+#!/usr/bin/perl
+
+# A SMTP-over-SSH Port Forwarding Scrpt
+# Copyright (c) 2010 Linode, LLC
+# Author: Philip C. Paradis <pparadis@linode.com>
+# Modifications: Sam Kleinman <sam@linode.com>
+# Usage: smtp-tunnel [start|stop]
+# Forward smtp traffic over ssh to a remote mailserver.
+
+## Edit these values to reflect the authentication credentials for the
+## SMTP server with which you wish to connect and send mail. If you
+## have chosen to run your mailserver on your linode using an
+## alternate port, modify the `$remote_port` value. You should not
+## need to modify the `$remote_ip` value.
+
+$remote_user = "REMOTE-USER";
+$remote_host = "REMOTE-HOST";
+$remote_port = "25";
+$remote_ip   = "127.0.0.1";
+
+## Modify these values if you are running a local SMTP server on port
+## 25, or if you need to start the tunnel as a non-root user, as
+## OpenSSH only allows root users to start tunnels to low-numbered
+## "privileged ports." If this is the case you will also need to
+## modify the configuration of your local mail sending agent.
+
+$local_ip    = "127.0.0.1";
+$local_port  = "2525";
+
+## You do not need to edit this file beyond this point.
+
+######################################################################
+
+$a = shift;
+$a =~ s/^\s+//;
+$a =~ s/\s+$//;
+
+$pid=`ps ax|grep ssh|grep $local_port|grep $remote_port`;
+$pid =~ s/^\s+//;
+@pids = split(/\n/,$pid);
+foreach $pid (@pids)
+{
+ if ($pid =~ /ps ax/) { next; }
+ split(/ /,$pid);
+}
+
+if (lc($a) eq "start")
+{
+ if ($_[0]) { print "smtp-tunnel already running.\n"; exit 1; }
+ else
+ {
+  system "ssh -f -L $local_ip:$local_port:$remote_ip:$remote_port $remote_user\@$remote_host -N";
+  exit 0;
+ }
+}
+elsif (lc($a) eq "stop")
+{
+ if ($_[0]) { kill 9,$_[0]; exit 0; }
+ else { exit 1; }
+}
+else
+{
+ print "Usage: smtp-tunnel [start|stop]\n";
+ exit 1;
+}
