@@ -14,9 +14,23 @@
 # Changelog:
 ###############################################################################
 
+TZ=UTC
+export TZ
+
 ## If you wish to set $LOCALTZ in this script, then set it here:
+#LOCALTZ="Pacific/Honolulu"
 #LOCALTZ="America/Los_Angeles"
-LOCALTZ="Europe/Berlin"
+#LOCALTZ="America/New_York"
+#LOCALTZ="America/Sao_Paulo"
+#LOCALTZ="Europe/London"
+LOCALTZ="Europe/Amsterdam"
+#LOCALTZ="Europe/Berlin"
+#LOCALTZ="Asia/Tehran"
+#LOCALTZ="Asia/Kolkata"
+#LOCALTZ="Asia/Shanghai"
+#LOCALTZ="Asia/Hong_Kong"
+#LOCALTZ="Asia/Tokyo"
+#LOCALTZ="Australia/Melbourne"
 
 function usage
 {
@@ -54,7 +68,7 @@ function setup
             fi
         fi
     fi
-
+    
     if test -z "$LOCALTZ" ; then
         LOCALTZ=$_LOCALTZ_
         export LOCALTZ
@@ -106,7 +120,7 @@ if [ "$#" == "0" ]; then
     exit -1
 fi
 
-setup
+#setup
 while [ "$1" != "" ]; do
     case $1 in
         -l | --localtz )      ## check number of args
