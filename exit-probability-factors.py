@@ -8,7 +8,7 @@
 #
 # From JSON data taken from Compass, [0] it creates a multidimensional array
 # of country codes and the probability of exiting from that country. Then, it
-# generates a windorized standard deviation and a trimmed standard deviation
+# generates a winsorized standard deviation and a trimmed standard deviation
 # of the probabilities within that array. Next, it takes the standard
 # deviation of all combined exit-by-country probabilities, subtracts either
 # the winsorized or trimmed standard deviation of all combined exit-by-country
