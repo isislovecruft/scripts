@@ -62,7 +62,7 @@ compass_file = os.path.expanduser("~/compass.json")
 json_output_file = os.path.expanduser("~/compass-incentive-factors.json")
 
 if not os.path.isfile(compass_file):
-    if sys.argv[1] and os.path.isfile(sys.argv[1]):
+    if ( len(sys.argv) == 2 ) and os.path.isfile(sys.argv[1]):
         compass_file = os.path.abspath(sys.argv[1])
     else:
         cmd = os.system(
@@ -183,5 +183,7 @@ print("Trimmed standard deviation: ", trimmed_std)
 incentivized = incentive(cc_array, trimmed_std)
 json_output  = simplejson.dumps(incentivized)
 print(json_output)
+
 with open(json_output_file, "wb") as output:
     output.write(json_output)
+    print("Results stored as JSON string in %s" % json_output_file)
