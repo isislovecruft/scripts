@@ -51,6 +51,7 @@
 # :copyright: (c) 2013 Isis Agora Lovecruft, The Tor Project, Inc.
 
 from __future__ import print_function
+from pprint     import pprint
 
 import numpy
 import os
@@ -178,7 +179,7 @@ print("Winsorized standard deviation: ", winsorized_p_exits)
 
 ## the trimmed standard deviation of exit probabilities by country:
 trimmed_std = trimmed(sorted_p_exits_col2, 0.02, 6.50)
-print("Trimmed standard deviation: ", trimmed_std)
+print("Trimmed standard deviation: ", trimmed_std, "\n")
 
 incentivized = incentive(cc_array, trimmed_std)
 json_output  = simplejson.dumps(incentivized)
@@ -186,4 +187,7 @@ print(json_output)
 
 with open(json_output_file, "wb") as output:
     output.write(json_output)
-    print("Results stored as JSON string in %s" % json_output_file)
+    print("Results stored as JSON string in %s\n" % json_output_file)
+
+print("Results:\n--------\n")
+pprint(simplejson.load(open(json_output_file)), depth=5)
