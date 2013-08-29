@@ -160,6 +160,17 @@ def incentive(array, weight_factor):
                              'incentive_factor': factor})
     return incentivized
 
+def sanity_check(incentives):
+    """Check that √Σ^(crange)_i=1{factor/10} == 1.
+
+    :param list incentives_list: The return value of :func:`incentivize`.
+    """
+    print("Doing a sanity check:\n")
+    sane = numpy.sqrt(sum([ (incentives[x].get('incentive_factor')/10.)
+                            for x in crange ]) )
+    if sane == 1: print("\tSanity check passed:")
+    else: print("\tSanity check failed:")
+    print("\t√Σ^(crange)_i=1{√(factor)/10} == %f" % sane)
 
 cc_list      = get_field('cc')
 p_exit_list  = get_field('p_exit')
@@ -182,8 +193,8 @@ trimmed_std = trimmed(sorted_p_exits_col2, 0.02, 6.50)
 print("Trimmed standard deviation: ", trimmed_std, "\n")
 
 incentivized = incentive(cc_array, trimmed_std)
+sanity_check(incentivized)
 json_output  = simplejson.dumps(incentivized)
-print(json_output)
 
 with open(json_output_file, "wb") as output:
     output.write(json_output)
