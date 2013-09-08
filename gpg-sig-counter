@@ -1,0 +1,85 @@
+#!/bin/bash
+#-----------------------------------------------------------------------------
+# boilerplate-bash
+# ----------------
+# A simple utility to copy a file to a new location with a new name, and then
+# immediately start editing it. For boilerplates.
+#
+# :authors: Isis Agora Lovecruft, 0xa3adb67a2cdb8b35
+# :license: AGPLv3, see https://www.gnu.org/licenses/agpl-3.0.txt for text
+# :version: 0.0.1
+#
+#-----------------------------------------------------------------------------
+
+## SIG_REPO should be set to the local directory your signature count repo is
+## located at:
+SIG_REPO=~/.gnupg/sigs-0xA3ADB67A2CDB8B35
+
+## REMOTE should be set to the name of the remote you wish to push to, if any:
+REMOTE=origin
+
+## BRANCH should be set the the name of the branch to push, if any:
+BRANCH=master
+
+## Don't touch anything else, unless you've found a bug and are patching it.
+## ----------------------------------------------------------------------------
+
+NAME=${0%%/}
+
+function usage () {
+    printf "Usage: %s -f FILE -d DOMAIN [other gpg options]\n\n" $NAME
+    printf "Options:\n"
+    printf " -f FILE\tThe file to create a signature for\n"
+    printf " -d DOMAIN\tThe domain of the email address on your GPG key\n"
+    printf " -h\t\tThis cruft\n"
+    exit 1
+}
+
+## check that we have at least some arguments
+if test "$#" -lt 1 ; then usage ; fi
+
+while getopts f:d:h x; do
+    case $x in
+        f)
+            file=$OPTARG;
+            if test -n "${file}" -a -n "${domain}" ; then
+                printf "at opt f, vars set\n"
+                break
+            fi ;;
+        d) 
+            domain=$OPTARG;
+            if test -n "${file}" -a -n "${domain}" ; then
+                printf "at opt f, vars set\n"
+                break
+            fi ;;
+        h) usage;;
+        *) break;;
+    esac
+done
+shift $((OPTIND - 1))
+gpgopts=$*
+
+printf "got gpgopts: %s\n" $gpgopts
+
+if test -z "$gpgopts" ; then
+    gpgopts='-a --clearsign'
+fi
+
+scf="${SIG_REPO}"/sig-count
+printf "Using signature count file %s" $scf
+
+data_note=signed.data@$domain=$file
+sig_count_note=sig.count@$domain=$sig_count
+
+gpg -s $gpgopts \
+    --sig-notation signed.data@"$domain"="$file" \
+    --sig-notation sig.count@"$domain"=$(( `cat $scf` + 1 )) $file && \
+    { ns=$(( `cat $scf` + 1 )) ;
+      echo -n "$ns" |& tee > "$scf" ; } && \
+          { d=`date +"%s"`;
+            cd $SIG_REPO && \
+                { git add $scf && \
+                  git commit -q -S -m "$d $ns" </dev/null ;} && \
+                { git push $REMOTE $BRANCH && \
+                  git log --color --format=format:"%CredCommit hash:%Cgreen %>(2)%H %n%CredCommit message:%Cgreen %>(2)%s %n%CredSigned commit verification:%n%C(auto)%GG%n" HEAD^.. ;}; }
+
