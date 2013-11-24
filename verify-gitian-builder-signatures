@@ -1,0 +1,133 @@
+#!/bin/bash
+#-----------------------------------------------------------------------------
+# verify-gitian-builder-signatures
+# --------------------------------
+# Given a directory containing a TBB-3.x tarball, a sha256sums.txt file, and
+# several files containing GnuPG signatures from gitian builders, check all
+# the signatures against their proper data files.
+#
+# Can be used within the directory containing the above files:
+#
+#    $ verify-gitian-builder-signatures
+#
+# or given a directory path:
+#
+#    $ verify-gitian-builder-signatures ~/tbb
+#
+# :authors: Isis Agora Lovecruft, 0xa3adb67a2cdb8b35
+# :license: MIT licence
+# :version: 0.0.1
+#-----------------------------------------------------------------------------
+
+if [[ "x$#" == "x1" ]] ; then
+    maybe_dir="$1"
+else
+    maybe_dir=`pwd`
+fi
+
+if test -d "$maybe_dir" ; then
+    bundle_download_dir=$maybe_dir
+    printf "Checking signature files in directory: %s\n" "$bundle_download_dir"
+else
+    printf "Can't find directory '%s'… are you sure it exists?" "$maybe_dir"
+    exit 1
+fi
+
+sums='sha256sums.txt'
+sigs=$(find . -name "*asc")
+gitian_sigs=''
+tbb_sigfile=
+tbb_tarball=
+
+red="$(tput setaf 1)"
+green="$(tput setaf 10)"
+lavender="$(tput setaf 13)"
+reset="$(tput sgr0)"
+
+CCZE=$(which ccze)
+
+GPG=$(which gpg2) # Default to gpg2, and fallback to gpg if not found.
+if test -z "$GPG"; then GPG=$(which gpg); fi
+if test -z "$GPG"; then printf "You must have GnuPG installed!\nExiting…\n"; fi
+
+# Separate out the signature on the TBB tarball, we want to check that one last.
+for sig in ${sigs} ; do
+    sig="${sig##./}"
+    if [[ "${sig::9}" == "sha256sum" ]]; then
+        gitian_sigs=${gitian_sigs}" $sig"
+    else
+        tbb_sigfile=$sig
+        tbb_tarball=${sig%%.asc}
+    fi
+done
+
+printf "――――――――――――――――――――――――\n"
+printf "Checking all Gitian Builder signatures on %s…\n\n" "$lavender$sums$reset"
+
+# Check gitian builder signatures on the sha256sums.txt file first:
+for sig in ${gitian_sigs} ; do
+    psig="$green$sig$reset" # Add some colour
+    pver="$lavender$sums$reset"
+    printf "Verifying signature file %s for %s…\n" "$psig" "$pver"
+
+    if test -n "$CCZE" ; then
+        gpg2 --quiet --status-fd 1 --verify $sig $sums 2>/dev/null | ccze -A
+        returncode="$?"
+    else
+        gpg2 --quiet --status-fd 1 --verify $sig $sums 2>/dev/null
+        returncode="$?"
+    fi
+
+    # Exit noisily if one of the gitian builder signatures was not okay:
+    if test "$returncode" -ne "0" ; then
+        printf "%sSIGNATURE VERIFICATION ERROR!%s\n" "$red" "$reset"
+        printf "Exiting...\n"
+        exit 2
+    fi
+done
+
+printf "\n%sAll signatures from participating Gitian Builders" "$green"
+printf " checked out OK!%s\n" "$reset"
+printf "――――――――――――――――――――――――\n"
+printf "Checking sha256sum for "
+grep "$tbb_tarball" "$sums" | sha256sum -c -
+returncode="$?"
+
+# Exit noisily if the sha256sum for the tarball doesn't match the one found in
+# sha256sums.txt:
+if test "$returncode" -ne "0" ; then
+    printf "%sWARNING%s: The sha256sum of your Tor Browser Bundle, " "$red" "$reset"
+    printf "'%s', does NOT MATCH the corresponding one " "$tbb_tarball"
+    printf "given in %s!" "$sums"
+    printf "\n\n"
+    printf "Perhaps there was an error downloading it. Please try "
+    printf "re-downloading $s and running this check again." "$tbb_tarball"
+    printf "\n\n"
+    exit 2
+fi
+
+if test -n "$tbb_sigfile" ; then
+    printf "――――――――――――――――――――――――\n"
+
+    # Last, check the signature on the TBB tarball itself:
+    psig="$green$tbb_sigfile$reset"
+    pver="$lavender$tbb_tarball$reset"
+    printf "Verifying signature %s for Tor Browser Bundle: %s…\n" "$psig" "$pver"
+
+    if test -n "$CCZE" ; then
+        gpg2 --quiet --status-fd 1 --verify $tbb_sigfile $tbb_tarball 2>/dev/null | ccze -A
+        returncode="$?"
+    else
+        gpg2 --quiet --status-fd 1 --verify $tbb_sigfile $tbb_tarball 2>/dev/null
+        returncode="$?"
+    fi
+
+    # Exit noisily if the tarball signature wasn't okay:
+    if test "$returncode" -ne "0" ; then
+        printf "%sSIGNATURE VERIFICATION ERROR!%s\n" "$red" "$reset"
+        printf "Exiting...\n"
+        exit 2
+    fi
+fi
+
+exit 0
