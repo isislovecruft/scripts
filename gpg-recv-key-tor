@@ -2,16 +2,67 @@
 #-----------------------------------------------------------------------------
 # gpg-recv-keys-tor
 # -----------------
-# Download GPG keys over Tor. The keyserver is keys.mayfirst.org.
+# Download GPG keys over Tor. The default keyserver is 
+# http://cryptonomicon.mit.edu.
 #
 # :authors: Isis Agora Lovecruft, 0xa3adb67a2cdb8b35
-# :license: AGPLv3, see https://www.gnu.org/licenses/agpl-3.0.txt for text
-# :version: 0.0.1
+# :license: MIT licence
+# :version: 0.0.2
 #-----------------------------------------------------------------------------
+
+TOR_SOCKSPORT=59050
+
+keyservopts="verbose no-honor-keyserver-url no-honor-pka-record include-subkeys"
+keyservopts=$keyservopts"no-include-attributes http-proxy=socks4a://127.0.0.1:"
+keyservopts=$keyservopts$TOR_SOCKSPORT
+
+#keyserver='http://18.9.60.141'                    ## cryptonomicon.mit
+#keyserver='hkp://209.234.253.170'                 ## keys.mayfirst.org
+#kerservopts=$keyservopts" ca-cert-file=~/.keys.indymedia.org.pem"
+#keyserver='hkps://2eghzlv2wwcq7u7y.onion'         ## keys.indymedia.org (hkps)
+#kerserver='https://qtt2yl5jocgrk7nu.onion'
+
+if ! dpkg -l gnupg-curl 2>&1 >/dev/null ; then
+    printf "Install gnupg-curl."
+fi
 
 if test $# -lt 1 ; then
     printf "Usage: %s <keyid>\n" "${0%%\/}"
 else
-    ## use keys.mayfirst.org
-    gpg --keyserver hkp://209.234.253.170 --keyserver-options 'verbose no-honor-keyserver-url no-honor-pka-record include-subkeys no-include-attributes http-proxy=socks4a://127.0.0.1:59050' --recv-keys $@
+## We would use this cert, if using gnupg-curl, and using keys.indymedia.org
+## for the keyserver, but this seems broken on most boxes :(
+
+#     cat > ~/.keys.indymedia.org.pem <<EOF
+# -----BEGIN CERTIFICATE-----
+# MIIEjzCCA3mgAwIBAgIETkE8YzALBgkqhkiG9w0BAQUwgY4xCzAJBgNVBAYTAlhY
+# MRIwEAYDVQQKEwlJbmR5bWVkaWExEzARBgNVBAsTCktleXNlcnZlcnMxDzANBgNV
+# BAcTBkdsb2JhbDEdMBsGA1UEAxMUSW5keW1lZGlhIEtleXNlcnZlcnMxJjAkBgkq
+# hkiG9w0BCQEWF3Jvb3RAa2V5cy5pbmR5bWVkaWEub3JnMB4XDTExMDgwOTEzNTU1
+# OFoXDTEzMDgwODEzNTYwMlowgY4xCzAJBgNVBAYTAlhYMRIwEAYDVQQKEwlJbmR5
+# bWVkaWExEzARBgNVBAsTCktleXNlcnZlcnMxDzANBgNVBAcTBkdsb2JhbDEdMBsG
+# A1UEAxMUSW5keW1lZGlhIEtleXNlcnZlcnMxJjAkBgkqhkiG9w0BCQEWF3Jvb3RA
+# a2V5cy5pbmR5bWVkaWEub3JnMIIBIDALBgkqhkiG9w0BAQEDggEPADCCAQoCggEB
+# AK8bEhzGxf5BKcIJGAHo6e1m9TV0NUA8Bbw+fOpRZzslCXPJbTnaLXhrmNpsEdVR
+# P/wzaa0QO3P7D1I+I0/eVTJq2ndPcv+95YOVePLHN+g7QbBFiSrsq76uonZX7gii
+# Snx5y24uxYYdP7Wk9UCJCmXrHvx2RrhNNKnq3p11g42bfcfmOJ8W1oL8VF9n5JRj
+# 8FXvW4NngIN5iYcUctwJl56qLqmdIlf603YLlAIETTNBHIzCLwfBAMAN3sq5mxSN
+# E6hsxgy3vOjyRaXMbF4F2L8aBtIrZ2kyE72cxslCBAqASDsgNAnJsCd/P0dpfMw0
+# VPqnKW/v773/6hQz6m5oLekCAwEAAaOB+DCB9TAMBgNVHRMBAf8EAjAAMB0GA1Ud
+# JQQWMBQGCCsGAQUFBwMCBggrBgEFBQcDATCBlQYDVR0RBIGNMIGKghJrZXlzLmlu
+# ZHltZWRpYS5vcmeCFnd3dy5rZXlzLmluZHltZWRpYS5vcmeCE2tleXMxLmluZHlt
+# ZWRpYS5vcmeCF3d3dy5rZXlzMS5pbmR5bWVkaWEub3JnghZxdHQyeWw1am9jZ3Jr
+# N251Lm9uaW9ughYyZWdoemx2Mnd3Y3E3dTd5Lm9uaW9uMA8GA1UdDwEB/wQFAwMH
+# oAAwHQYDVR0OBBYEFN9lY1Z/5EyVXbrvJG/9Q7Zx219tMAsGCSqGSIb3DQEBBQOC
+# AQEASLc14DqY25wug0BBYHZzoitmbHKduCGdwKp0Fxf9aVfQAzK98w09n3zzU3lX
+# FxNBEPOL6Tulo11ttmG5U3tU5mCRyFMrjx4U7wtMaFqk60Y6sjlMA7z8Se+NPdl4
+# ZxO5dXikge7QXEjriqec/Al5ACSSxOa80x6xk584N7i0qjZpbW6vZm/DYKjWmuWs
+# kHcXfs7kSTBfyMGmygQopCZWBzY6B6F7JmRoOtD1kGqYDNvsk6UMaTvrgwFgeOU1
+# 9gjbgVmLBWDpiduqR5ILU0tpp7k5hTL26P+JQrDn2aWOXdDtMiDb4gsl2l0bzQv8
+# OtvrQO/Qg4rD/oxY7Cq5h+8jmg==
+# -----END CERTIFICATE-----
+#
+# EOF
+
+    gpg2 --keyserver hkp://18.9.60.141 \
+        --keyserver-options "$keyservopts" --recv-keys $@
 fi
