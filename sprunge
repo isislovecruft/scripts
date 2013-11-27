@@ -18,4 +18,4 @@
 # Changelog:
 ###############################################################################
 
-curl --socks4a 127.0.0.1:59050 -A 'Mozilla/5.0 (Windows NT 6.1; WOW64; rv:11.0) Gecko/20100201 Firefox/12.0' -F 'sprunge=<-' http://sprunge.us $1
+curl --socks4a 127.0.0.1:59050 -A 'Mozilla/5.0 (Windows NT 6.1; rv:17.0) Gecko/20100101 Firefox/17.0' -F 'sprunge=<-' http://sprunge.us $1
