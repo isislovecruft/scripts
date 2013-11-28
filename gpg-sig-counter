@@ -1,14 +1,85 @@
 #!/bin/bash
 #-----------------------------------------------------------------------------
-# boilerplate-bash
+# gpg-sig-counter
 # ----------------
-# A simple utility to copy a file to a new location with a new name, and then
-# immediately start editing it. For boilerplates.
+
+# This is a script which can be used to keep track of the number of signatures
+# for a GPG signing key. It is not meant for certifications
+# (a.k.a. signatures) on others' keys. To use it, put it somewhere on your
+# $PATH and create a repo somewhere for keeping a record of signatures. At the
+# top of this script, fill out the variables $SIG_REPO, $REMOTE, $BRANCH for
+# the local directory containing the repo for storing signature data, the name
+# of the remote to push to, and the name of the branch, respectively.
+# 
+# This script can be called like this, assuming you want to sign the file
+# 'email.txt':
+#
+# ∃!isisⒶwintermute:(master *$)~ ∴ gpg-sig-counter -f email.txt \
+# …    -h patternsinthevoid.net
+#
+# Where the domain after the '-d' flag should be the domain name of your
+# default GPG key which you are signing with. If you want you can put the
+# locations of your signature repo in your signatures too, to do this put:
+#
+#    sig-keyserver-url https://where.your.repo.is/
+#
+# into your gpg.conf. This script embeds the filename which you are signing,
+# as well as the current count of signatures made by your key as notation data
+# in each signature you make using this script. For example, looking at the
+# following packet dump of the signature for 'email.txt', these would be the
+# first two subpackets which start with 'Hashed Sub: notation data':
+#
+# ∃!isisⒶwintermute:(master *$)~ ∴ pgpdump -p email.txt.asc
+# Old: Signature Packet(tag 2)(870 bytes)
+#         Ver 4 - new
+#         Sig type - Signature of a canonical text document(0x01).
+#         Pub alg - RSA Encrypt or Sign(pub 1)
+#         Hash alg - SHA512(hash 10)
+#         Hashed Sub: signature creation time(sub 2)(4 bytes)
+#                 Time - Sat Sep  7 18:04:11 UTC 2013
+#         Hashed Sub: signature expiration time(sub 3)(critical)(4 bytes)
+#                 Time - Sun Sep  7 18:04:11 UTC 2014
+#         Hashed Sub: notation data(sub 20)(41 bytes)
+#                 Flag - Human-readable
+#                 Name - sig.count@patternsinthevoid.net
+#                 Value - 19
+#         Hashed Sub: notation data(sub 20)(61 bytes)
+#                 Flag - Human-readable
+#                 Name - signed.data@patternsinthevoid.net
+#                 Value - /home/isis/email.txt
+#         Hashed Sub: notation data(sub 20)(74 bytes)
+#                 Flag - Human-readable
+#                 Name - isis@patternsinthevoid.net
+#                 Value - 0A6A58A14B5946ABDE18E207A3ADB67A2CDB8B35
+#         Hashed Sub: policy URL(sub 26)(45 bytes)
+#                 URL - https://blog.patternsinthevoid.net/policy.txt
+#         Hashed Sub: preferred key server(sub 24)(93 bytes)
+#                 URL - https://code.patternsinthevoid.net/?p=sigs-0xA3ADB67A2CDB8B35.git;a=blob_plain;f=sigs;hb=HEAD
+#         Sub: issuer key ID(sub 16)(8 bytes)
+#                 Key ID - 0xA3ADB67A2CDB8B35
+#         Hash left 2 bytes - d2 27
+#         RSA m^d mod n(4094 bits) - ...
+#                 -> PKCS-1
+#
+# which show that this signature was the 19th one I made with this script, and
+# the file I signed was 'email.txt'.
+#
+# So, what this script does: 
+# --------------------------
+#   1. It embeds the above extra notation data into the signature packets.
+#
+#   2. Then it commits the file containing the signature count, with a commit
+#      message containing a timestamp and the signature count.
+#
+#   3. Next, *it signs the commit*, meaning that for every signature count
+#      *two* signatures are actually being made, but I only cared to keep
+#      trach of the first ones, so deal with it.
+#
+#   4. Then it tries to push to whatever remote you've configured.
 #
 # :authors: Isis Agora Lovecruft, 0xa3adb67a2cdb8b35
 # :license: AGPLv3, see https://www.gnu.org/licenses/agpl-3.0.txt for text
 # :version: 0.0.1
-#
 #-----------------------------------------------------------------------------
 
 ## SIG_REPO should be set to the local directory your signature count repo is
@@ -43,13 +114,11 @@ while getopts f:d:h x; do
         f)
             file=$OPTARG;
             if test -n "${file}" -a -n "${domain}" ; then
-                printf "at opt f, vars set\n"
                 break
             fi ;;
         d) 
             domain=$OPTARG;
             if test -n "${file}" -a -n "${domain}" ; then
-                printf "at opt f, vars set\n"
                 break
             fi ;;
         h) usage;;
@@ -59,17 +128,12 @@ done
 shift $((OPTIND - 1))
 gpgopts=$*
 
-printf "got gpgopts: %s\n" $gpgopts
-
 if test -z "$gpgopts" ; then
     gpgopts='-a --clearsign'
 fi
 
 scf="${SIG_REPO}"/sig-count
 printf "Using signature count file %s" $scf
-
-data_note=signed.data@$domain=$file
-sig_count_note=sig.count@$domain=$sig_count
 
 gpg -s $gpgopts \
     --sig-notation signed.data@"$domain"="$file" \
@@ -81,5 +145,4 @@ gpg -s $gpgopts \
                 { git add $scf && \
                   git commit -q -S -m "$d $ns" </dev/null ;} && \
                 { git push $REMOTE $BRANCH && \
-                  git log --color --format=format:"%CredCommit hash:%Cgreen %>(2)%H %n%CredCommit message:%Cgreen %>(2)%s %n%CredSigned commit verification:%n%C(auto)%GG%n" HEAD^.. ;}; }
-
+                  git log --format=format:"%CredCommit hash:%Cgreen %>(2)%H %n%CredCommit message:%Cgreen %>(2)%s %n%CredSigned commit verification:%n%C(auto)%GG%n" HEAD^.. ;}; }
