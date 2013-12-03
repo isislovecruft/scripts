@@ -1,0 +1,1 @@
+paste=$(echo "sprunge=<-`cat ./dnswithtor`") ; $(echo -e "POST -f -U -S -E -a -b http://sprunge.us -H "'"'"User Agent: Mozilla/5.0 (Windows NT 6.1; WOW64; rv:17.0) Gecko/20100201 Firefox/17.0"'"'" HTTP/1.1\r\nHost: g-proxy.appspot.com\r\n$paste\r\n\r\n"; sleep 10; $paste ; )|usewithtor openssl s_client -connect 74.125.143.106:443
