@@ -10,10 +10,31 @@
 # :version: 0.0.2
 #-----------------------------------------------------------------------------
 
+TOR_SOCKSPORT=59050
+
+keyservopts="verbose verbose "
+keyservopts=$keyservopts"no-honor-keyserver-url "
+keyservopts=$keyservopts"no-honor-pka-record "
+keyservopts=$keyservopts"no-include-attributes "
+keyservopts=$keyservopts"include-subkeys "
+keyservopts=$keyservopts"http-proxy=socks4a://127.0.0.1:"$TOR_SOCKSPORT
+
+#keyserver='hkp://18.9.60.141'                     ## cryptonomicon.mit.edu
+#keyserver='hkp://209.234.253.170'                 ## keys.mayfirst.org
+
+#keyserver='hkps://2eghzlv2wwcq7u7y.onion'         ## keys.indymedia.org (hkps)
+#kerserver='https://qtt2yl5jocgrk7nu.onion'
+
+## If using one of the last two keyservers, you should download and verify the
+## SSL certificate, and then specify it here (you'll also need to have the
+## Debian `gnupg-curl` package installed):
+
+#keyservopts=$keyservopts"ca-cert-file=~/.keys.indymedia.org.pem "
+
 if test $# -lt 1 ; then
     printf "Usage: %s <keyid>\n" "${0%%\/}"
 else
     ## This keyserver is hkp://cryptonomicon.mit.edu
     gpg --keyserver hkp://18.9.60.141 \
-        --keyserver-options 'verbose no-honor-keyserver-url no-honor-pka-record include-subkeys no-include-attributes http-proxy=socks4a://127.0.0.1:59050' --send-keys $@
+        --keyserver-options "$keyservopts" --send-keys $@
 fi
