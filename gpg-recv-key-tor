@@ -6,8 +6,8 @@
 # http://cryptonomicon.mit.edu.
 #
 # :authors: Isis Agora Lovecruft, 0xa3adb67a2cdb8b35
-# :license: MIT licence
-# :version: 0.0.2
+# :license: GPLv3+
+# :version: 0.0.3
 #-----------------------------------------------------------------------------
 
 TOR_SOCKSPORT=59050
