@@ -6,8 +6,8 @@
 # hkp://cryptonomicon.mit.edu.
 #
 # :authors: Isis Agora Lovecruft, 0xa3adb67a2cdb8b35
-# :license: AGPLv3, see https://www.gnu.org/licenses/agpl-3.0.txt for text
-# :version: 0.0.1
+# :license: GPLv3+
+# :version: 0.0.2
 #-----------------------------------------------------------------------------
 
 if test $# -lt 1 ; then
