@@ -2,7 +2,8 @@
 #-----------------------------------------------------------------------------
 # gpg-send-keys-tor
 # -----------------
-# Upload GPG keys over Tor. The keyserver is keys.mayfirst.org.
+# Upload GPG keys over Tor. The default keyserver is
+# hkp://cryptonomicon.mit.edu.
 #
 # :authors: Isis Agora Lovecruft, 0xa3adb67a2cdb8b35
 # :license: AGPLv3, see https://www.gnu.org/licenses/agpl-3.0.txt for text
@@ -12,6 +13,7 @@
 if test $# -lt 1 ; then
     printf "Usage: %s <keyid>\n" "${0%%\/}"
 else
-    ## use keys.mayfirst.org
-    gpg --keyserver hkp://209.234.253.170 --keyserver-options 'verbose no-honor-keyserver-url no-honor-pka-record include-subkeys no-include-attributes http-proxy=socks4a://127.0.0.1:59050' --send-keys $@
+    ## This keyserver is hkp://cryptonomicon.mit.edu
+    gpg --keyserver hkp://18.9.60.141 \
+        --keyserver-options 'verbose no-honor-keyserver-url no-honor-pka-record include-subkeys no-include-attributes http-proxy=socks4a://127.0.0.1:59050' --send-keys $@
 fi
