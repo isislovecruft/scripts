@@ -305,6 +305,7 @@ function mercurial_check ()
 Go requires mercurial. Please use your distro's package manager to obtain
 mercurcial first. Exiting...
 EOF
+    exit 1
     fi
 }
 
