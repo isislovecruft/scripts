@@ -224,15 +224,10 @@ function install_go ()
         MISMATCH=
     fi
 
-function clean_up ()
-{
-    JUNK="$theirs $ours $HTML_PAGE $GO_SOURCE $googlecode_cert $google_cert "
-    printf "Cleaning up..."
-    for file in $JUNK; do
-        if test -f $file ; then
-            printf "Removing ${file}..."
-            sudo rm $file
-        fi
+    printf "Cleaning up...\n"
+    for file in $theirs $ours $HTML_PAGE $GO_SOURCE \
+        $googlecode_cert $google_cert ; do
+        if test -f "$file" -a -O "$file" ; then rm $file ; fi
     done
 
     if test -v MISMATCH ; then printf "Exiting...\n" ; exit 1 ; fi
