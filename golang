@@ -351,17 +351,32 @@ while [[ "x$1" != "x" ]]; do
         tor )
             printf "Attempting to force downloads over Tor...\n"
             tpo='https://www.torproject.org/download'
-            tsocks='https://gitweb.torproject.org/torsocks.git'
+            tsocks='https://gitweb.torproject.org/torsocks'
+            newtsocks='https://github.com/dgoulet/torsocks'
             if [ -z "$(which tor)" ] ; then
                 printf "It seems you don't have Tor installed!\n"
                 printf "You can download it here:\n\t%s\n" $tpo
             elif [ -z "$(which usewithtor)" ] ; then
                 cat <<EOF
 It seems you don't have torsocks installed!
-Unfortunately, if you distribution doesn't already provide a package for it,
-you'll likely have to build it from source. The git repository for it is here:
+
+Unfortunately, if your distribution doesn't already provide a package for it,
+you'll likely need to build it from source.
+
+The official Tor Project repository for the older version of torsocks is here:
 
     $tsocks
+
+However, the older torsocks is occaisionally known to leak DNS queries and
+potentially some other types of traffic, which can deanonymise you. For this
+reason, torsocks was recently rewritten. The newer version *should* be safer,
+but we're not making any promises yet. (Otherwise, we would have merged it
+into the official repository!) However, if you are feeling slightly more
+adventurous, and would like to assist us in testing, please consider
+installing the newer torsocks, which can be found here:
+
+    $newtsocks
+
 EOF
             else
                 USE_WITH_TOR=1
