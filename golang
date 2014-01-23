@@ -307,55 +307,7 @@ EOF
     fi
 }
 
-[[ "$#" > 0 ]] || { usage; exit 1; };
 
-USE_WITH_TOR=0
-while [[ "x$1" != "x" ]]; do
-    case $1 in
-        install )
-            #root_check
-            mercurial_check
-            os_check
-            go_check
-            install_go $USE_WITH_TOR
-            clean_up
-            export_paths
-            printf "\n\nInstallation successful!\n"
-            printf "To get started learning Go, try doing:\n"
-            printf "\t$ go get code.google.com/p/go-tour/gotour\n"
-            unset tarball
-            unset details
-            exit 0
-            ;;
-        reinstall )
-            #root_check
-            mercurial_check
-            os_check
-            go_check
-            install_go $USE_WITH_TOR
-            clean_up
-            printf "\n\nUpgrade successful!\n"
-            printf "To get started learning Go, try doing:\n"
-            printf "\t$ go get code.google.com/p/go-tour/gotour\n"
-            unset tarball
-            unset details
-            exit 0
-            ;;
-        path )
-            os_check
-            export_paths
-            exit 0
-            ;;
-        tor )
-            printf "Attempting to force downloads over Tor...\n"
-            tpo='https://www.torproject.org/download'
-            tsocks='https://gitweb.torproject.org/torsocks'
-            newtsocks='https://github.com/dgoulet/torsocks'
-            if [ -z "$(which tor)" ] ; then
-                printf "It seems you don't have Tor installed!\n"
-                printf "You can download it here:\n\t%s\n" $tpo
-            elif [ -z "$(which usewithtor)" ] ; then
-                cat <<EOF
 It seems you don't have torsocks installed!
 
 Unfortunately, if your distribution doesn't already provide a package for it,
@@ -373,10 +325,30 @@ adventurous, and would like to assist us in testing, please consider
 installing the newer torsocks, which can be found here:
     $newtsocks
 EOF
-            else
-                USE_WITH_TOR=1
-                export USE_WITH_TOR
-            fi
+[[ "$#" > 0 ]] || { usage; exit 1; };
+
+USE_WITH_TOR=0
+DO_INSTALL=0
+DO_REINSTALL=0
+
+while [[ "x$1" != "x" ]]; do
+    case $1 in
+        install )
+            DO_INSTALL=1
+            shift
+            ;;
+        reinstall )
+            DO_REINSTALL=1
+            shift
+            ;;
+        path )
+            os_check
+            export_paths
+            exit 0
+            ;;
+        tor )
+            tor_check
+            USE_WITH_TOR=1
             shift
             ;;
         * )
@@ -385,3 +357,37 @@ EOF
             ;;
     esac
 done
+
+if ! test "$DO_INSTALL" -eq 1 -o "$DO_REINSTALL" -eq 1 ; then
+    usage
+    exit 1
+fi
+
+if test "$DO_INSTALL" -eq 1 -o "$DO_REINSTALL" -eq 1 ; then
+    if test "$USE_WITH_TOR" -eq 0 ; then
+        printf "FFFFFFFUUUUUUUUUUUUU"
+        exit 2
+    fi
+    #root_check
+    bad_opts_check
+    mercurial_check
+    os_check
+    go_check
+    install_go $USE_WITH_TOR
+    clean_up
+    if test "$DO_REINSTALL" -eq 1 ; then
+        printf "\n\nRe-installation sucessfull!\n"
+    elif test "$DO_INSTALL" -eq 1 ; then
+        export_paths
+        printf "\n\nInstallation successful!\n"
+    fi
+    cat <<EOF
+To get started learning Go, you can check out an interactive tour:
+    $ go get code.google.com/p/go-tour/gotour
+Or, if you're feeling erudite, try chillaxing with this book:
+    http://www.golang-book.com/
+EOF
+    unset tarball
+    unset details
+    exit 0
+fi
