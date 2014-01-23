@@ -200,8 +200,8 @@ function install_go ()
 
     unset USE_WITH_TOR
 
-    theirs=/tmp/go_reported_hash
-    ours=/tmp/go_our_hash
+    theirs=${HOME}/go_reported_hash
+    ours=${HOME}/go_our_hash
 
     printf "Checking SHA1 hash of downloaded source...\n"
     grep "sha1" $HTML_PAGE | cut -d ">" -f 2 | cut -d "<" -f 1 | cat > $theirs
