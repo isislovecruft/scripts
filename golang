@@ -166,6 +166,7 @@ function install_go ()
             printf "Getting GoTools from:\n\t%s\n" ${tarball}
             if [[ "${USE_WITH_TOR}" == 1 ]]; then
                 cd ${HOME} && \
+                    printf "Hooray! We're using torsocks! :)\n"
                     usewithtor wget --progress=bar -U "$USER_AGENT" \
                     --secure-protocol=TLSv1 --ca-certificate=$googlecode_cert \
                     -O ${GO_SOURCE} ${tarball}
@@ -187,6 +188,7 @@ function install_go ()
     if ! test -f "$HTML_PAGE" ; then
         printf "Getting reported SHA1 from:\n\t%s\n" ${details}
         if [[ "${USE_WITH_TOR}" == 1 ]]; then
+            printf "Hooray! We're using torsocks! :)\n"
             cd ${HOME} && \
                 usewithtor wget -nv --progress=bar -U "$USER_AGENT" \
                 --secure-protocol=TLSv1 --ca-certificate=$google_cert \
