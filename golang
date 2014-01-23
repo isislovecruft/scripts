@@ -10,19 +10,16 @@
 # system default $PATH to include Go's location by appending it to
 # /etc/profile.
 #
-# For x86_64 and 32-bit Linux, only. Should work on all distros, except for
+# For x86 64- and 32- bit Linux, only. Should work on all distros, except for
 # RHEL and CentOS.
 #
-# This script was tested with torsocks, to use this with Tor, do:
-#     $ sudo usewithtor golang [re]install
-#
-# @author Isis Agora Lovecruft, 0xa3adb67a2cdb8b35
-# @date  3 September 2012
-# @version 0.0.5
+# :authors: Isis Agora Lovecruft, 0xa3adb67a2cdb8b35
+# :date:    3 September 2012
+# :version: 0.0.5
 #
 ##############################################################################
 
-set -e
+set -eET
 
 GO_VERSION="1.2"
 USER_AGENT='Mozilla/5.0 (Windows NT 6.1; rv:17.0) Gecko/20100101 Firefox/17.0")'
@@ -32,23 +29,23 @@ contact="${contact_name}@${contact_host}"
 
 function usage ()
 {
-    printf "%s [options]\n\n" $(basename $0)
+    printf "Usage: %s [options]\n\n" $(basename $0)
+    printf "Options:\n"
     printf "\tinstall           Install Go ${GO_VERSION}\n"
     printf "\treinstall         Update Go to ${GO_VERSION}\n"
-    printf "\tpath              Export PATH to Go & GoTools\n\n"
+    printf "\tpath              Export PATH to Go & GoTools\n"
+    printf "\ttor               Wrap network-related commands with torsocks\n"
     cat <<EOF
-If you have tor and torsocks installed, you can use this script like so:
-    $ sudo usewithtor golang [re]install
 
-Additional Info
----------------
-The 'install' and 'path' options will append to /etc/profile (this is part
-of the Go installation instructions; it's so that your GOPATH and GOROOT
-environment variables are available for use), whereas the 'reinstall' option
-will not update your PATH.
+Additional Info:
+    The “install” and “path” options will append to /etc/profile. This is
+part of the Go installation instructions; it simply configures your GOPATH
+and GOROOT environment variables so that you can start using Go.
 
-If reinstalling, make sure to choose the reinstall option, else you'll end
-up with Go in your PATH twice!
+    The “reinstall” option assumes you've already correctly configured your
+PATH in order to use Go. If you already have a Go interpreter installed, or
+you've already configured your environment, be sure to choose the “reinstall”
+option, else you'll end up with Go in your PATH twice!
 EOF
 }
 
@@ -162,11 +159,10 @@ function install_go ()
 
     if ! test -f "$GO_SOURCE" ; then
         if test -n "$tarball"; then
-            printf "Downloading GoTools, which includes gc (the Go compiler)...\n"
-            printf "Getting GoTools from:\n\t%s\n" ${tarball}
+            printf "Downloading Go from:\n"
+            printf "\t%s\n" ${tarball}
             if [[ "${USE_WITH_TOR}" == 1 ]]; then
                 cd ${HOME} && \
-                    printf "Hooray! We're using torsocks! :)\n"
                     usewithtor wget --progress=bar -U "$USER_AGENT" \
                     --secure-protocol=TLSv1 --ca-certificate=$googlecode_cert \
                     -O ${GO_SOURCE} ${tarball}
@@ -188,7 +184,6 @@ function install_go ()
     if ! test -f "$HTML_PAGE" ; then
         printf "Getting reported SHA1 from:\n\t%s\n" ${details}
         if [[ "${USE_WITH_TOR}" == 1 ]]; then
-            printf "Hooray! We're using torsocks! :)\n"
             cd ${HOME} && \
                 usewithtor wget -nv --progress=bar -U "$USER_AGENT" \
                 --secure-protocol=TLSv1 --ca-certificate=$google_cert \
@@ -220,14 +215,14 @@ function install_go ()
         printf "Installing GoTools ...\n"
         printf "Because unpacking the tarball into /usr/local requires root,\n"
         printf "you will be prompted for your sudo password.\n"
-        sudo -- tar -C /usr/local -xzf $GO_SOURCE && \
-            printf "Installation successful.\n"
+        sudo -- tar -C /usr/local -xzf $GO_SOURCE
+        if test "$?" -eq 0 ; then
+            printf "Installation successful!\n"
+        fi
     else
-        printf "WARNING: SHA1 sums do not match! Not installing...\n"
-        printf "Exiting...\n"
-        exit 1
+        printf "WARNING: shasums do not match! Aborting installation...\n"
+        MISMATCH=
     fi
-}
 
 function clean_up ()
 {
@@ -239,6 +234,10 @@ function clean_up ()
             sudo rm $file
         fi
     done
+
+    if test -v MISMATCH ; then printf "Exiting...\n" ; exit 1 ; fi
+
+    unset MISMATCH HASHDIFF OUR_ARCH ARCH_STRING FILE DOWN GO_SOURCE HTML_PAGE
 }
 
 function export_paths ()
@@ -291,10 +290,12 @@ function go_check ()
                 printf "Already up to date!\n"
                 exit 0
             elif [[ "$current" > "${GO_VERSION}" ]] ; then
-                printf "Oops! You've got Go %s, while we've got Go %s.\n" ${current} $GO_VERSION
-                printf "Please mailto:%s and tell Isis to update me.\n" $contact
+                printf "Oops! You've got Go %s, " ${current}
+                printf "while we've got Go %s.\n" $GO_VERSION
+                printf "Please mailto:%s and tell Isis to " $contact
+                printf "update this script!\n"
             else
-                printf "Updating previous Go installation to %s...\n" $GO_VERSION
+                printf "Updating Go to version %s...\n" $GO_VERSION
             fi
         fi
     fi
@@ -366,7 +367,6 @@ Unfortunately, if your distribution doesn't already provide a package for it,
 you'll likely need to build it from source.
 
 The official Tor Project repository for the older version of torsocks is here:
-
     $tsocks
 
 However, the older torsocks is occaisionally known to leak DNS queries and
@@ -376,9 +376,7 @@ but we're not making any promises yet. (Otherwise, we would have merged it
 into the official repository!) However, if you are feeling slightly more
 adventurous, and would like to assist us in testing, please consider
 installing the newer torsocks, which can be found here:
-
     $newtsocks
-
 EOF
             else
                 USE_WITH_TOR=1
