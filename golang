@@ -277,7 +277,7 @@ function os_check ()
 
 function go_check ()
 {
-    if test -n $(which go) ; then
+    if test -n "$(which go)" ; then
         current=$(go version | cut -d " " -f 3 | cut -b 3- )
         printf "Found previous Go installation. Version: %s\n" ${current}
         if test -d /usr/local/go ; then
@@ -298,7 +298,7 @@ function go_check ()
 
 function mercurial_check ()
 {
-    if test -z $(which hg) ; then
+    if test -z "$(which hg)" ; then
         cat <<EOF
 Go requires mercurial. Please use your distro's package manager to obtain
 mercurcial first. Exiting...
