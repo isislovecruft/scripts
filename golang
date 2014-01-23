@@ -307,7 +307,28 @@ EOF
     fi
 }
 
+function tor_check ()
+{
+    tpo='https://www.torproject.org/download'
+    tsocks='https://gitweb.torproject.org/torsocks'
+    newtsocks='https://github.com/dgoulet/torsocks'
 
+    printf "Checking to see if tor is installed..."
+    if test -z "$(which tor)" ; then
+        FAIL=1
+        cat <<EOF
+It seems you don't have tor installed! If your distribution doesn't package
+it, you can download tor from the Tor Project website:
+    $tpo
+EOF
+    else
+        printf "OK\n"
+    fi
+
+    printf "Checking to see if torsocks is installed..."
+    if test -z "$(which torsocks)" ; then
+        FAIL=1
+        cat <<EOF
 It seems you don't have torsocks installed!
 
 Unfortunately, if your distribution doesn't already provide a package for it,
@@ -325,6 +346,24 @@ adventurous, and would like to assist us in testing, please consider
 installing the newer torsocks, which can be found here:
     $newtsocks
 EOF
+    else
+        printf "OK\n"
+    fi
+
+    test -n "$FAIL" && exit 2
+    unset FAIL
+}
+
+function bad_opts_check ()
+{
+    if test "$DO_INSTALL" -eq 1 -a "$DO_REINSTALL" -eq 1 ; then
+        printf "ERROR: We can't install and reinstall at the same time.\n"
+        printf "       One or the other; pick your poison, buddy!\n\n"
+        printf "Exiting...\n"
+        exit 2
+    fi
+}
+
 [[ "$#" > 0 ]] || { usage; exit 1; };
 
 USE_WITH_TOR=0
