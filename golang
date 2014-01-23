@@ -22,7 +22,7 @@
 set -eET
 
 GO_VERSION="1.2"
-USER_AGENT='Mozilla/5.0 (Windows NT 6.1; rv:17.0) Gecko/20100101 Firefox/17.0")'
+USER_AGENT='Mozilla/5.0 (Windows NT 6.1; rv:24.0) Gecko/20100101 Firefox/24.0'
 contact_name=isis
 contact_host=patternsinthevoid.net
 contact="${contact_name}@${contact_host}"
@@ -163,7 +163,7 @@ function install_go ()
             printf "\t%s\n" ${tarball}
             if [[ "${USE_WITH_TOR}" == 1 ]]; then
                 cd ${HOME} && \
-                    usewithtor wget --progress=bar -U "$USER_AGENT" \
+                    torsocks wget --progress=bar -U $USER_AGENT \
                     --secure-protocol=TLSv1 --ca-certificate=$googlecode_cert \
                     -O ${GO_SOURCE} ${tarball}
             else
@@ -185,7 +185,7 @@ function install_go ()
         printf "Getting reported SHA1 from:\n\t%s\n" ${details}
         if [[ "${USE_WITH_TOR}" == 1 ]]; then
             cd ${HOME} && \
-                usewithtor wget -nv --progress=bar -U "$USER_AGENT" \
+                torsocks wget -nv --progress=bar -U "$USER_AGENT" \
                 --secure-protocol=TLSv1 --ca-certificate=$google_cert \
                 -O $HTML_PAGE ${details}
         else
