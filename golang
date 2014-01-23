@@ -163,12 +163,12 @@ function install_go ()
             printf "\t%s\n" ${tarball}
             if [[ "${USE_WITH_TOR}" == 1 ]]; then
                 cd ${HOME} && \
-                    torsocks wget --progress=bar -U $USER_AGENT \
+                    torsocks wget -q --progress=bar -U $USER_AGENT \
                     --secure-protocol=TLSv1 --ca-certificate=$googlecode_cert \
                     -O ${GO_SOURCE} ${tarball}
             else
                 cd ${HOME} && \
-                    wget --timestamping --progress=bar -U "$USER_AGENT" \
+                    wget -q --timestamping --progress=bar -U $USER_AGENT \
                     --secure-protocol=TLSv1 --ca-certificate=$googlecode_cert \
                     -O ${GO_SOURCE} ${tarball}
             fi
@@ -185,12 +185,12 @@ function install_go ()
         printf "Getting reported SHA1 from:\n\t%s\n" ${details}
         if [[ "${USE_WITH_TOR}" == 1 ]]; then
             cd ${HOME} && \
-                torsocks wget -nv --progress=bar -U "$USER_AGENT" \
+                torsocks wget -n --progress=bar -U "$USER_AGENT" \
                 --secure-protocol=TLSv1 --ca-certificate=$google_cert \
                 -O $HTML_PAGE ${details}
         else
             cd ${HOME} && \
-                wget -nv --progress=bar -U "$USER_AGENT" \
+                wget -n --progress=bar -U "$USER_AGENT" \
                 --secure-protocol=TLSv1 --ca-certificate=$google_cert \
                 -O $HTML_PAGE ${details}
         fi
