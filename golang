@@ -311,6 +311,8 @@ EOF
     fi
 }
 
+[[ "$#" > 0 ]] || { usage; exit 1; };
+
 USE_WITH_TOR=0
 while [[ "x$1" != "x" ]]; do
     case $1 in
