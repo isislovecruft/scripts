@@ -36,6 +36,7 @@ fi
 sums='sha256sums.txt'
 sigs=$(find . -name "*asc")
 gitian_sigs=''
+debug_sigs=
 tbb_sigfile=
 tbb_tarball=
 
@@ -56,8 +57,14 @@ for sig in ${sigs} ; do
     if [[ "${sig::9}" == "sha256sum" ]]; then
         gitian_sigs=${gitian_sigs}" $sig"
     else
-        tbb_sigfile=$sig
-        tbb_tarball=${sig%%.asc}
+        is_debug_file_sig=`echo "$sig" | grep debug`
+        if test -n "$is_debug_file_sig" ; then
+            printf "Debug symbols tarball found: %s\n" "$sig"
+            debug_sigs=${debug_sigs}" $sig"
+        else
+            tbb_sigfile=$sig
+            tbb_tarball=${sig%%.asc}
+        fi
     fi
 done
 
@@ -129,5 +136,31 @@ if test -n "$tbb_sigfile" ; then
         exit 2
     fi
 fi
+
+printf "――――――――――――――――――――――――\n"
+printf "Checking all signatures on debug symbols tarballs: %s…\n\n" "$lavender$debug_sigs$reset"
+
+# And... check the signatures on debug symbol tarballs:
+for sig in ${debug_sigs} ; do
+    psig="$green$sig$reset" # Add some colour
+    debug_file="${sig%%.asc}"
+    pver="$lavender$debug_file$reset"
+    printf "Verifying signature file %s for %s…\n" "$psig" "$pver"
+
+    if test -n "$CCZE" ; then
+        gpg2 --quiet --status-fd 1 --verify $sig $debug_file 2>/dev/null | ccze -A
+        returncode="$?"
+    else
+        gpg2 --quiet --status-fd 1 --verify $sig $debug_file 2>/dev/null
+        returncode="$?"
+    fi
+
+    # Exit noisily if one of the gitian builder signatures was not okay:
+    if test "$returncode" -ne "0" ; then
+        printf "%sSIGNATURE VERIFICATION ERROR!%s\n" "$red" "$reset"
+        printf "Exiting...\n"
+        exit 2
+    fi
+done
 
 exit 0
