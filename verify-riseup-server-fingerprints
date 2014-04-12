@@ -11,7 +11,8 @@
 ##############################################################################
 
 #CERTHTML='https://help.riseup.net/en/certificates#verify-these-instructions'
-CERTHTML='https://help.riseup.net/en/signed-certificate-fingerprints'
+#CERTHTML='https://help.riseup.net/en/signed-certificate-fingerprints'
+CERTHTML='https://help.riseup.net/en/security/network-security/certificates/riseup-signed-certificate-fingerprints.txt'
 RISEUP_GPG_FPR=4E0791268F7C67EABE88F1B03043E2B7139A768E
 KEYSERVER='hkp://keys.mayfirst.org'
 MAIN_CERT='riseup.net'
