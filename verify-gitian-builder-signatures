@@ -19,11 +19,19 @@
 # :version: 0.0.1
 #-----------------------------------------------------------------------------
 
-if [[ "x$#" == "x1" ]] ; then
-    maybe_dir="$1"
-else
-    maybe_dir=`pwd`
-fi
+
+do_extract=
+maybe_dir=
+bundle_download_dir=
+
+while getopts xd: f; do
+    case $f in
+        x) do_extract=true ; shift ;;
+        d) maybe_dir=$OPTARG ;;
+    esac
+done
+
+test -z "$maybe_dir" && maybe_dir=`pwd`
 
 if test -d "$maybe_dir" ; then
     bundle_download_dir=$maybe_dir
@@ -37,6 +45,7 @@ sums='sha256sums.txt'
 sigs=$(find . -name "*asc")
 gitian_sigs=''
 debug_sigs=
+debug_files=
 tbb_sigfile=
 tbb_tarball=
 
@@ -144,6 +153,7 @@ printf "Checking all signatures on debug symbols tarballs: %s…\n\n" "$lavender
 for sig in ${debug_sigs} ; do
     psig="$green$sig$reset" # Add some colour
     debug_file="${sig%%.asc}"
+    debug_files="${debug_files} $debug_file"
     pver="$lavender$debug_file$reset"
     printf "Verifying signature file %s for %s…\n" "$psig" "$pver"
 
@@ -162,5 +172,24 @@ for sig in ${debug_sigs} ; do
         exit 2
     fi
 done
+
+# Exit now if we're not extracting
+test -z "$do_extract" && exit 0
+
+printf "――――――――――――――――――――――――\n"
+printf "Extracting %s...\n" "$tbb_tarball"
+tar Jxf "$tbb_tarball"
+
+for debugfile in ${debug_files} ; do
+    printf "Extracting debug symbols from %s...\n" "$debugfile"
+    unzip -qq "$debugfile"
+done
+
+if test -d "Debug" ; then
+    printf "Moving Debug/ directory to tor-browser_en-US/Debug/ ...\n"
+    mv Debug tor-browser_en-US/
+fi
+printf "――――――――――――――――――――――――\n"
+printf "Extraction complete!\n"
 
 exit 0
