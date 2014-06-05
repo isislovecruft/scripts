@@ -24,10 +24,21 @@ do_extract=
 maybe_dir=
 bundle_download_dir=
 
-while getopts xd: f; do
+while getopts hxd: f; do
     case $f in
+        h)
+            printf '%s [-h] [-x] [-d DIRECTORY]\n\n' "$(basename $0)"
+            printf 'OPTIONS\n'
+            printf -- '-h\t\tThis cruft.\n'
+            printf -- '-x\t\tExtract TBB and debug symbols if all signatures '
+            printf -- 'check out okay.\n'
+            printf -- '-d DIRECTORY\tCheck the TBB files in DIRECTORY.\n'
+            printf -- '  \t\t(default: `%s`)\n\n' "$(pwd)"
+            exit 0
+            ;;
         x) do_extract=true ; shift ;;
         d) maybe_dir=$OPTARG ;;
+        # don't we need `shift 2` above? or `shift $(( OPTIND - 1))`?
     esac
 done
 
