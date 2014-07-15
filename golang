@@ -139,8 +139,8 @@ EOF
 function install_go ()
 {
     OUR_ARCH=$(uname -m)
-    FILE="https://go.googlecode.com/files/go"
-    DOWN="https://code.google.com/p/go/downloads/detail?name=go"
+    FILE="https://golang.org/dl/"
+
     if [[ "$OUR_ARCH" == "x86_64" ]]; then
         ARCH_STRING=".linux-amd64.tar.gz"
     elif [[ "$OUR_ARCH" == "i686" ]]; then
@@ -152,7 +152,7 @@ function install_go ()
 
     save_file=${GO_VERSION}${ARCH_STRING}
     tarball=${FILE}$save_file
-    details=${DOWN}$save_file
+    details=${FILE}
 
     GO_SOURCE=${HOME}/go${save_file}
     HTML_PAGE=${HOME}/go${GO_VERSION}.tar.gz.html
