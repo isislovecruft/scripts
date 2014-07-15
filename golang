@@ -181,21 +181,17 @@ function install_go ()
         printf "Download already completed, attempting to resume install.\n"
     fi
 
-    if ! test -f "$HTML_PAGE" ; then
-        printf "Getting reported SHA1 from:\n\t%s\n" ${details}
-        if [[ "${USE_WITH_TOR}" == 1 ]]; then
-            cd ${HOME} && \
-                torsocks wget -nc --progress=bar -U "$USER_AGENT" \
-                --secure-protocol=TLSv1 --ca-certificate=$google_cert \
-                -O $HTML_PAGE ${details}
-        else
-            cd ${HOME} && \
-                wget -nc --progress=bar -U "$USER_AGENT" \
-                --secure-protocol=TLSv1 --ca-certificate=$google_cert \
-                -O $HTML_PAGE ${details}
-        fi
+    printf "Getting reported SHA1 from:\n\t%s\n" ${details}
+    if [[ "${USE_WITH_TOR}" == 1 ]]; then
+        cd ${HOME} && \
+            torsocks wget --progress=bar -U "$USER_AGENT" \
+            --secure-protocol=TLSv1 --ca-certificate=$google_cert \
+            -O $HTML_PAGE ${details}
     else
-        printf "We've already got the reported SHA1 from code.google.com...\n"
+        cd ${HOME} && \
+            wget --progress=bar -U "$USER_AGENT" \
+            --secure-protocol=TLSv1 --ca-certificate=$google_cert \
+            -O $HTML_PAGE ${details}
     fi
 
     unset USE_WITH_TOR
