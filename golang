@@ -403,10 +403,6 @@ if ! test "$DO_INSTALL" -eq 1 -o "$DO_REINSTALL" -eq 1 ; then
 fi
 
 if test "$DO_INSTALL" -eq 1 -o "$DO_REINSTALL" -eq 1 ; then
-    if test "$USE_WITH_TOR" -eq 0 ; then
-        printf "FFFFFFFUUUUUUUUUUUUU"
-        exit 2
-    fi
     #root_check
     bad_opts_check
     mercurial_check
