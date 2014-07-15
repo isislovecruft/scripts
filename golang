@@ -178,7 +178,7 @@ function install_go ()
             exit 1
         fi
     else
-        printf "Download already completed, attempting to resume install."
+        printf "Download already completed, attempting to resume install.\n"
     fi
 
     if ! test -f "$HTML_PAGE" ; then
