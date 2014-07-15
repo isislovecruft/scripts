@@ -200,7 +200,7 @@ function install_go ()
     ours=${HOME}/go_our_hash
 
     printf "Checking SHA1 hash of downloaded source...\n"
-    grep "sha1" $HTML_PAGE | cut -d ">" -f 2 | cut -d "<" -f 1 | cat > $theirs
+    grep -A6 "$save_file" $HTML_PAGE | grep -oE "[a-z0-9]{40}" | cat > $theirs
     sha1sum $GO_SOURCE | cut -d " " -f 1 > $ours
 
     printf "Reported SHA1 from Google Code: %s\n" $(cat $theirs )
