@@ -185,12 +185,12 @@ function install_go ()
         printf "Getting reported SHA1 from:\n\t%s\n" ${details}
         if [[ "${USE_WITH_TOR}" == 1 ]]; then
             cd ${HOME} && \
-                torsocks wget -n --progress=bar -U "$USER_AGENT" \
+                torsocks wget -nc --progress=bar -U "$USER_AGENT" \
                 --secure-protocol=TLSv1 --ca-certificate=$google_cert \
                 -O $HTML_PAGE ${details}
         else
             cd ${HOME} && \
-                wget -n --progress=bar -U "$USER_AGENT" \
+                wget -nc --progress=bar -U "$USER_AGENT" \
                 --secure-protocol=TLSv1 --ca-certificate=$google_cert \
                 -O $HTML_PAGE ${details}
         fi
