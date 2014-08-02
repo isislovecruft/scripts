@@ -235,7 +235,7 @@ for commit in "$span" ; do
                 ## test, same goes for the keyids
 
                 allowed_keyid=false
-                for keyid in "${trusted_keys[@]"; do
+                for keyid in "${trusted_keys[@]}"; do
                     if test -n "$(git tag --verify $ref | grep gpg: | grep $keyid )"; then
                         allowed_keyid=true
                     fi
