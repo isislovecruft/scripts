@@ -31,7 +31,7 @@ while getopts hxd: f; do
             printf 'OPTIONS\n'
             printf -- '-h\t\tThis cruft.\n'
             printf -- '-x\t\tExtract TBB and debug symbols if all signatures '
-            printf -- 'check out okay.\n'
+            printf -- 'check out okay. (Unix only)\n'
             printf -- '-d DIRECTORY\tCheck the TBB files in DIRECTORY.\n'
             printf -- '  \t\t(default: `%s`)\n\n' "$(pwd)"
             exit 0
@@ -53,12 +53,16 @@ else
 fi
 
 sums='sha256sums.txt'
-sigs=$(find . -name "*asc")
-gitian_sigs=''
-debug_sigs=
+# TODO: Verify signatures for incremental (.mar) files, they are named like
+#       (.*sha256sums\.incrementals\.txt)(.*)(\.asc)
+gitian_sigs=$(find . -type f -regextype posix-extended \
+              -regex "(.*sha256sums\.txt)(.*)(\.asc)" -printf "%f ")
+debug_sigs=$(find . -type f -regextype posix-extended \
+             -regex ".*(tor-)(browser-)?(.*)(debug)(.*)(\.asc)" -printf "%f ")
 debug_files=
-tbb_sigfile=
-tbb_tarball=
+tbbs=$(find . -type f -regextype posix-extended \
+       -regex ".*([tT]or)(-)?([bB]rowser-)(install)?(.*)(\.)(tar\.xz|dmg|exe){1}" \
+       -printf "%f ")
 
 red="$(tput setaf 1)"
 green="$(tput setaf 10)"
@@ -71,94 +75,80 @@ GPG=$(which gpg2) # Default to gpg2, and fallback to gpg if not found.
 if test -z "$GPG"; then GPG=$(which gpg); fi
 if test -z "$GPG"; then printf "You must have GnuPG installed!\nExiting…\n"; fi
 
-# Separate out the signature on the TBB tarball, we want to check that one last.
-for sig in ${sigs} ; do
-    sig="${sig##./}"
-    if [[ "${sig::9}" == "sha256sum" ]]; then
-        gitian_sigs=${gitian_sigs}" $sig"
-    else
-        is_debug_file_sig=`echo "$sig" | grep debug`
-        if test -n "$is_debug_file_sig" ; then
-            printf "Debug symbols tarball found: %s\n" "$sig"
-            debug_sigs=${debug_sigs}" $sig"
-        else
-            tbb_sigfile=$sig
-            tbb_tarball=${sig%%.asc}
-        fi
-    fi
-done
+printf "Found Tor Browser files: %s%s%s\n" "$lavender" "$tbbs" "$reset"
 
 printf "――――――――――――――――――――――――\n"
 printf "Checking all Gitian Builder signatures on %s…\n\n" "$lavender$sums$reset"
+#printf "DEBUG: All gitian builder sigfiles: %s" "${gitian_sigs}"
 
 # Check gitian builder signatures on the sha256sums.txt file first:
 for sig in ${gitian_sigs} ; do
     psig="$green$sig$reset" # Add some colour
     pver="$lavender$sums$reset"
-    printf "Verifying signature file %s for %s…\n" "$psig" "$pver"
+    printf "Verifying signature file %s for %s… " "$psig" "$pver"
 
-    if test -n "$CCZE" ; then
-        gpg2 --quiet --status-fd 1 --verify $sig $sums 2>/dev/null | ccze -A
-        returncode="$?"
-    else
-        gpg2 --quiet --status-fd 1 --verify $sig $sums 2>/dev/null
-        returncode="$?"
-    fi
+    valid=`gpg2 --quiet --status-fd 1 --verify $sig $sums 2>/dev/null | grep "VALIDSIG"`
+    returncode="$?"
 
     # Exit noisily if one of the gitian builder signatures was not okay:
     if test "$returncode" -ne "0" ; then
-        printf "%sSIGNATURE VERIFICATION ERROR!%s\n" "$red" "$reset"
-        printf "Exiting...\n"
+        printf "\t[%sERROR%s]\n" "$red" "$reset"
+        printf "Exiting…\n"
         exit 2
+    elif test "$returncode" -eq "0" -a -n "$valid" ; then
+        printf "\t[%sOKAY%s]\n" "$green" "$reset"
     fi
 done
 
 printf "\n%sAll signatures from participating Gitian Builders" "$green"
-printf " checked out OK!%s\n" "$reset"
+printf " checked out OKAY!%s\n" "$reset"
+
 printf "――――――――――――――――――――――――\n"
-printf "Checking sha256sum for "
-grep "$tbb_tarball" "$sums" | sha256sum -c -
-returncode="$?"
+for tbb in ${tbbs} ; do
+    printf "Checking sha256sum for %s%s%s…" "$lavender" "$tbb" "$reset"
+    grep "$tbb" "$sums" | sha256sum -c - 2>&1 1>/dev/null
+    returncode="$?"
 
-# Exit noisily if the sha256sum for the tarball doesn't match the one found in
-# sha256sums.txt:
-if test "$returncode" -ne "0" ; then
-    printf "%sWARNING%s: The sha256sum of your Tor Browser Bundle, " "$red" "$reset"
-    printf "'%s', does NOT MATCH the corresponding one " "$tbb_tarball"
-    printf "given in %s!" "$sums"
-    printf "\n\n"
-    printf "Perhaps there was an error downloading it. Please try "
-    printf "re-downloading $s and running this check again." "$tbb_tarball"
-    printf "\n\n"
-    exit 2
-fi
-
-if test -n "$tbb_sigfile" ; then
-    printf "――――――――――――――――――――――――\n"
+    # Exit noisily if the sha256sum for the tarball doesn't match the one
+    # found in sha256sums.txt:
+    if test "$returncode" -ne "0" ; then
+        printf "\t[%sERROR%s]\n" "$red" "$reset"
+        printf "\n%sWARNING%s: The sha256sum of your Tor Browser Bundle, " "$red" "$reset"
+        printf "'%s', does NOT MATCH the corresponding one " "$tbb_tarball"
+        printf "given in %s!\n\n" "$sums"
+        printf "Perhaps there was an error downloading it. Please try "
+        printf "re-downloading $s and running this check again." "$tbb_tarball"
+        printf "\n\n"
+        exit 2
+    elif test "$returncode" -eq "0" ; then
+        printf "\t[%sOKAY%s]\n" "$green" "$reset"
+    fi
 
     # Last, check the signature on the TBB tarball itself:
-    psig="$green$tbb_sigfile$reset"
-    pver="$lavender$tbb_tarball$reset"
-    printf "Verifying signature %s for Tor Browser Bundle: %s…\n" "$psig" "$pver"
+    tbb_sigfile="${tbb}.asc"
+    if test -f "$tbb_sigfile" ; then
+        printf "Verifying signature %s%s%s… " "$green" "$tbb_sigfile" "$reset"
 
-    if test -n "$CCZE" ; then
-        gpg2 --quiet --status-fd 1 --verify $tbb_sigfile $tbb_tarball 2>/dev/null | ccze -A
+        valid=`gpg2 --quiet --status-fd 1 --verify $tbb_sigfile $tbb_tarball 2>/dev/null | grep "VALIDSIG"`
         returncode="$?"
-    else
-        gpg2 --quiet --status-fd 1 --verify $tbb_sigfile $tbb_tarball 2>/dev/null
-        returncode="$?"
-    fi
 
-    # Exit noisily if the tarball signature wasn't okay:
-    if test "$returncode" -ne "0" ; then
-        printf "%sSIGNATURE VERIFICATION ERROR!%s\n" "$red" "$reset"
-        printf "Exiting...\n"
-        exit 2
+        # Exit noisily if the tarball signature wasn't okay:
+        if test "$returncode" -ne "0" ; then
+            printf "\t[%sERROR%s]\n" "$red" "$reset"
+            printf "Exiting…\n"
+            exit 2
+        elif test "$returncode" -eq "0" -a -n "$valid" ; then
+            printf "\t[%sOKAY%s]\n" "$green" "$reset"
+        fi
     fi
-fi
+done
+
+printf "\n%sAll sha256sums and signatures for Tor Browser downloads checked " "$green"
+printf "out OKAY!%s\n" "$reset"
+
 
 printf "――――――――――――――――――――――――\n"
-printf "Checking all signatures on debug symbols tarballs: %s…\n\n" "$lavender$debug_sigs$reset"
+printf "Checking all signatures on debug symbols…\n\n"
 
 # And... check the signatures on debug symbol tarballs:
 for sig in ${debug_sigs} ; do
@@ -166,41 +156,46 @@ for sig in ${debug_sigs} ; do
     debug_file="${sig%%.asc}"
     debug_files="${debug_files} $debug_file"
     pver="$lavender$debug_file$reset"
-    printf "Verifying signature file %s for %s…\n" "$psig" "$pver"
+    printf "Verifying signature file %s for %s… " "$psig" "$pver"
 
-    if test -n "$CCZE" ; then
-        gpg2 --quiet --status-fd 1 --verify $sig $debug_file 2>/dev/null | ccze -A
-        returncode="$?"
-    else
-        gpg2 --quiet --status-fd 1 --verify $sig $debug_file 2>/dev/null
-        returncode="$?"
-    fi
+    valid=`gpg2 --quiet --status-fd 1 --verify $sig $debug_file 2>/dev/null | grep "VALIDSIG"`
+    returncode="$?"
 
-    # Exit noisily if one of the gitian builder signatures was not okay:
+    # Exit noisily if one of the debug signatures was not okay:
     if test "$returncode" -ne "0" ; then
-        printf "%sSIGNATURE VERIFICATION ERROR!%s\n" "$red" "$reset"
-        printf "Exiting...\n"
+        printf "\t[%sERROR%s]\n" "$red" "$reset"
+        printf "Exiting…\n"
         exit 2
+    elif test "$returncode" -eq "0" -a -n "$valid" ; then
+        printf "\t[%sOKAY%s]\n" "$green" "$reset"
     fi
 done
+
+printf "\n%sAll signatures for Tor Browser debug symbols downloads checked " "$green"
+printf "out OKAY!%s\n" "$reset"
 
 # Exit now if we're not extracting
 test -z "$do_extract" && exit 0
 
+tbb_tarball=$(find . -type f -regextype posix-extended \
+              -regex ".*(tor-browser-)(.*)(\.)(tar\.xz){1}" -printf "%f")
+
 printf "――――――――――――――――――――――――\n"
-printf "Extracting %s...\n" "$tbb_tarball"
+printf "Extracting all files for %s%s%s…\n\n" "$lavender" "$tbb_tarball" "$reset"
+
+printf "Extracting %s%s%s…\n" "$lavender" "$tbb_tarball" "$reset"
 tar Jxf "$tbb_tarball"
 
 for debugfile in ${debug_files} ; do
-    printf "Extracting debug symbols from %s...\n" "$debugfile"
+    printf "Extracting debug symbols from %s%s%s…\n" "$lavender" "$debugfile" "$reset"
     unzip -qq "$debugfile"
 done
 
 if test -d "Debug" ; then
-    printf "Moving Debug/ directory to tor-browser_en-US/Debug/ ...\n"
+    printf "Moving Debug/ directory to tor-browser_en-US/Debug/ …\n"
     mv Debug tor-browser_en-US/
 fi
+printf "\n%sExtraction complete!%s\n" "$green" "$reset"
 printf "――――――――――――――――――――――――\n"
-printf "Extraction complete!\n"
 
 exit 0
