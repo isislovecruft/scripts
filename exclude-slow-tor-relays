@@ -1,0 +1,179 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+"""
+ exclude-slow-tor-relays
+ -----------------------
+
+ Generate a torrc file with an ExcludeNodes lines containing all relays whose
+ observed bandwidth is less than a given amount.
+
+ :author:    Isis <isis@patternsinthevoid.net> 0x0A6A58A14B5946ABDE18E207A3ADB67A2CDB8B35
+ :version:   0.0.1
+ :license:   AGPLv3
+ :copyright: © 2014-2015 Isis Agora Lovecruft
+"""
+
+from __future__ import print_function
+from __future__ import unicode_literals
+
+import argparse
+import os
+
+try:
+    from stem.descriptor import parse_file
+    from stem.descriptor import router_status_entry
+except ImportError:
+    print("""\
+This script requires Stem. If you're on a Debian-based system, try installing\n
+the `python-stem` package. See https://stem.torproject.org/ for more info.""")
+except Exception:
+    print("There was an error importing Stem.")
+
+
+#: The minimum bandwidth a relay should have, in kilobytes. Relays with less
+#: than this amount of bandwidth will be added to the ExcludeNodes line and
+#: therefore not used by your Tor client. (default: 250 KB/s)
+MINIMUM_BANDWIDTH = 250
+
+#: The path to the directory which your Tor process stores data in. In your
+#: torrc file, this directory is given under the option `DataDirectory`. Please
+#: see `man (1) tor` for more information, including the default path.
+TOR_DATA_DIR = os.path.expandvars("/home/isis/.tor/data")
+
+#: The path to Tor's init.d script (default: "/etc/init.d/tor-git")
+TOR_INITD_SCRIPT = "/etc/init.d/tor"
+
+#: The names of various flavours of consensus files which we might find in the
+#: :data:`TOR_DATA_DIR`. These files should hold basic information on all the
+#: relays we know about, including bandwidth information. You probably don't
+#: need to change this setting.
+POTENTIAL_CONSENSII = ["cached-consensus", "cached-microdesc-consensus"]
+
+#: If ``True``, print debugging information to stdout.
+DEBUG = False
+
+
+def _get_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-d', '--data-dir',
+        help="Path to Tor's DataDir (default: {0})".format(TOR_DATA_DIR))
+    parser.add_argument('-c', '--consensus-file',
+        help="The filename of Tor's cached*-consensus file (e.g.: {0})".format(
+            POTENTIAL_CONSENSII[-1]))
+    parser.add_argument('-b', '--min-bandwidth', type=int,
+        help="Relays under this bandwidth (in KB/s) will be excluded")
+
+    args = parser.parse_args()
+    return args
+
+def create_exclude_nodes_line(fingerprints):
+    exclude_nodes = 'ExcludeNodes ' + ','.join(fingerprints) + '\n'
+    return exclude_nodes
+
+def find_slow_nodes(consensus, minimum_bandwidth):
+    consensus_file = open(consensus, 'rb')
+    descriptors = list(parse_file(consensus_file))
+    total_relays = len(descriptors)
+
+    too_slow = []
+    
+    for relay in descriptors:
+        if relay.bandwidth <= minimum_bandwidth:
+            too_slow.append(relay.fingerprint)
+            if DEBUG:
+                print("Excluding %s with bandwidth=%s" %
+                      (relay.fingerprint, relay.bandwidth))
+    
+    too_slow = ['$%s' % fingerprint for fingerprint in too_slow]
+    print("Excluding %s/%s relays with bandwidth <= %s KB/s."
+          % (len(too_slow), total_relays, minimum_bandwidth))
+
+    return too_slow
+
+def add_new_torrc_to_initd(initd_script, torrc):
+    """TODO Add the torrc filepath returned from write_torrc() to the ARGS=
+    variable in TOR_INITD_SCRIPT if it is not already there.
+    """
+    print("")
+    print("-" * 80)
+
+    line = '\tARGS="${ARGS} -f %s"' % torrc
+    usage = "You should add `-f %s` to your usual invocation of Tor. " % torrc
+    initd = os.path.isfile(TOR_INITD_SCRIPT)
+
+    if initd:
+        usage = usage + "For example, you might wish to add the line:\n"
+
+    for index in range(0, len(usage), 80):
+        print(usage[index:index+80])
+    if initd:
+        print(line)
+        print("\nto your Tor init.d script (%s)." % TOR_INITD_SCRIPT)
+
+    print("-" * 80)
+
+def write_torrc(data_dir, lines):
+    filename = 'torrc.exclude-slow'
+    filepath = os.path.join(os.path.dirname(data_dir), filename)
+
+    stat = os.stat(data_dir)
+    uid = stat.st_uid
+    gid = stat.st_gid
+
+    with open(filepath, 'w') as fh:
+        fh.writelines(lines)
+        fh.flush()
+        os.fchown(fh.fileno(), uid, gid)
+
+    if DEBUG:
+        print("Wrote ExcludeNodes line to new torrc file: %s" % filepath)
+
+    return filepath
+
+def main(args):
+    too_slow = []
+    data_dir = None
+    consensus = None
+    consensii = []
+    min_bandwidth = None
+
+    if args.consensus_file:
+        consensii.append(args.consensus_file)
+    consensii.extend(POTENTIAL_CONSENSII)
+
+    data_dir = args.data_dir if args.data_dir else TOR_DATA_DIR
+    min_bw = args.min_bandwidth if args.min_bandwidth else MINIMUM_BANDWIDTH
+    cur_uid = os.getuid()
+
+    if os.path.isdir(data_dir) and os.access(data_dir, os.R_OK):
+        for filename in consensii:
+            filepath = os.path.join(data_dir, filename)
+            if os.path.exists(filepath) and os.path.isfile(filepath):
+                if os.access(filepath, os.R_OK):
+                    consensus = filepath
+                else:
+                    if DEBUG:
+                        print("Your user (%s) can't read the consensus file %s."
+                              % (cur_uid, filepath))
+    else:
+        if DEBUG:
+            print("Your user (%s) can't read Tor's DataDirectory (%s)."
+                  % (cur_uid, data_dir))
+
+    if not consensus:
+        if DEBUG:
+            print("Could not find or read consensus file.")
+        sys.exit(1)
+
+    too_slow = find_slow_nodes(consensus, min_bw)
+
+    if too_slow:
+        exclude_nodes = create_exclude_nodes_line(too_slow)
+        torrc = write_torrc(data_dir, exclude_nodes)
+        add_new_torrc_to_initd(TOR_INITD_SCRIPT, torrc)
+
+    return exclude_nodes
+
+
+if __name__ == "__main__":
+    main(_get_args())
