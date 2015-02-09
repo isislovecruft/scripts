@@ -21,7 +21,7 @@
 
 set -eET
 
-GO_VERSION="1.3"
+GO_VERSION="1.4.1"
 USER_AGENT='Mozilla/5.0 (Windows NT 6.1; rv:31.0) Gecko/20100101 Firefox/31.0'
 contact_name=isis
 contact_host=patternsinthevoid.net
