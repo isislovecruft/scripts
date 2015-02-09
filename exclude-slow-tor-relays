@@ -89,6 +89,8 @@ def find_slow_nodes(consensus, minimum_bandwidth):
     descriptors = list(parse_file(consensus_file))
     total_relays = len(descriptors)
 
+    consensus_file.close()
+
     too_slow = []
     
     for relay in descriptors:
