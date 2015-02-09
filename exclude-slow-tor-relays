@@ -18,6 +18,7 @@ from __future__ import unicode_literals
 
 import argparse
 import os
+import sys
 
 try:
     from stem.descriptor import parse_file
