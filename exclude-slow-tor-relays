@@ -17,6 +17,7 @@ from __future__ import print_function
 from __future__ import unicode_literals
 
 import argparse
+import logging
 import os
 import sys
 
@@ -50,19 +51,31 @@ TOR_INITD_SCRIPT = "/etc/init.d/tor"
 #: need to change this setting.
 POTENTIAL_CONSENSII = ["cached-consensus", "cached-microdesc-consensus"]
 
-#: If ``True``, print debugging information to stdout.
-DEBUG = False
+
+log = logging.getLogger()
 
 
 def _get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('-d', '--data-dir',
-        help="Path to Tor's DataDir (default: {0})".format(TOR_DATA_DIR))
+                        help=("Path to Tor's DataDir (default: %s)"
+                              % TOR_DATA_DIR))
     parser.add_argument('-c', '--consensus-file',
-        help="The filename of Tor's cached*-consensus file (e.g.: {0})".format(
-            POTENTIAL_CONSENSII[-1]))
+                        help=("The filename of Tor's consensus file (default: "
+                              "%s)" % POTENTIAL_CONSENSII[-1]))
     parser.add_argument('-b', '--min-bandwidth', type=int,
-        help="Relays under this bandwidth (in KB/s) will be excluded")
+                        help=("Relays under this bandwidth (in KB/s) will be "
+                              "excluded (default: %s KB/s)" % MINIMUM_BANDWIDTH))
+    parser.add_argument('-f', '--file',
+                        help=("The path to the file to write the new ExcludeNodes "
+                              "torrc to (default: DATA_DIR/../torrc.exclude-nodes)"))
+    log_group = parser.add_argument_group(title='Logging',
+                                          description="Options and settings for logging")
+    log_group.add_argument('--stderr', action='store_true', help="Log to stderr")
+    log_group.add_argument('--stdout', action='store_true', help="Log to stdout")
+    log_group.add_argument('--logfile', help="Log to file")
+    log_group.add_argument('--loglevel', help="Log level", default="INFO",
+                           choices=["DEBUG", "INFO", "WARN", "ERROR", "CRITICAL"])
 
     args = parser.parse_args()
     return args
@@ -81,13 +94,12 @@ def find_slow_nodes(consensus, minimum_bandwidth):
     for relay in descriptors:
         if relay.bandwidth <= minimum_bandwidth:
             too_slow.append(relay.fingerprint)
-            if DEBUG:
-                print("Excluding %s with bandwidth=%s" %
+            log.debug("Excluding %s with bandwidth=%s" %
                       (relay.fingerprint, relay.bandwidth))
     
     too_slow = ['$%s' % fingerprint for fingerprint in too_slow]
-    print("Excluding %s/%s relays with bandwidth <= %s KB/s."
-          % (len(too_slow), total_relays, minimum_bandwidth))
+    log.info("Excluding %s/%s relays with bandwidth <= %s KB/s."
+             % (len(too_slow), total_relays, minimum_bandwidth))
 
     return too_slow
 
@@ -95,8 +107,7 @@ def add_new_torrc_to_initd(initd_script, torrc):
     """TODO Add the torrc filepath returned from write_torrc() to the ARGS=
     variable in TOR_INITD_SCRIPT if it is not already there.
     """
-    print("")
-    print("-" * 80)
+    log.info("\n" + "-" * 80)
 
     line = '\tARGS="${ARGS} -f %s"' % torrc
     usage = "You should add `-f %s` to your usual invocation of Tor. " % torrc
@@ -106,12 +117,12 @@ def add_new_torrc_to_initd(initd_script, torrc):
         usage = usage + "For example, you might wish to add the line:\n"
 
     for index in range(0, len(usage), 80):
-        print(usage[index:index+80])
+        log.info(usage[index:index+80])
     if initd:
-        print(line)
-        print("\nto your Tor init.d script (%s)." % TOR_INITD_SCRIPT)
+        log.info(line)
+        log.info("\nto your Tor init.d script (%s)." % TOR_INITD_SCRIPT)
 
-    print("-" * 80)
+    log.info("-" * 80)
 
 def write_torrc(data_dir, lines):
     filename = 'torrc.exclude-slow'
@@ -126,8 +137,7 @@ def write_torrc(data_dir, lines):
         fh.flush()
         os.fchown(fh.fileno(), uid, gid)
 
-    if DEBUG:
-        print("Wrote ExcludeNodes line to new torrc file: %s" % filepath)
+    log.debug("Wrote ExcludeNodes line to new torrc file: %s" % filepath)
 
     return filepath
 
@@ -137,6 +147,17 @@ def main(args):
     consensus = None
     consensii = []
     min_bandwidth = None
+
+    if args.logfile:
+        log.addHandler(logging.FileHandler(args.logfile))
+    elif args.stderr:
+        log.addHandler(logging.StreamHandler(sys.stderr))
+    elif args.stdout:
+        log.addHandler(logging.StreamHandler(sys.stdout))
+    else:
+        log.addHandler(logging.StreamHandler(sys.stdout))
+
+    log.setLevel(logging._levelNames[args.loglevel])
 
     if args.consensus_file:
         consensii.append(args.consensus_file)
@@ -153,17 +174,14 @@ def main(args):
                 if os.access(filepath, os.R_OK):
                     consensus = filepath
                 else:
-                    if DEBUG:
-                        print("Your user (%s) can't read the consensus file %s."
-                              % (cur_uid, filepath))
+                    log.info("Your user (%s) can't read the consensus file %s."
+                             % (cur_uid, filepath))
     else:
-        if DEBUG:
-            print("Your user (%s) can't read Tor's DataDirectory (%s)."
-                  % (cur_uid, data_dir))
+        log.warn("Your user (%s) can't read Tor's DataDirectory (%s)."
+                 % (cur_uid, data_dir))
 
     if not consensus:
-        if DEBUG:
-            print("Could not find or read consensus file.")
+        log.error("Could not find or read consensus file.")
         sys.exit(1)
 
     too_slow = find_slow_nodes(consensus, min_bw)
