@@ -39,7 +39,7 @@ MINIMUM_BANDWIDTH = 250
 #: The path to the directory which your Tor process stores data in. In your
 #: torrc file, this directory is given under the option `DataDirectory`. Please
 #: see `man (1) tor` for more information, including the default path.
-TOR_DATA_DIR = os.path.expandvars("/home/isis/.tor/data")
+TOR_DATA_DIR = "/var/lib/tor"
 
 #: The path to Tor's init.d script (default: "/etc/init.d/tor-git")
 TOR_INITD_SCRIPT = "/etc/init.d/tor"
