@@ -98,6 +98,10 @@ def find_slow_nodes(consensus, minimum_bandwidth):
             too_slow.append(relay.fingerprint)
             log.debug("Excluding %s with bandwidth=%s" %
                       (relay.fingerprint, relay.bandwidth))
+        elif relay.is_unmeasured:
+            too_slow.append(relay.fingerprint)
+            log.debug("Excluding %s with unmeasured bandwidth=%s" %
+                      (relay.fingerprint, relay.bandwidth))
     
     too_slow = ['$%s' % fingerprint for fingerprint in too_slow]
     log.info("Excluding %s/%s relays with bandwidth <= %s KB/s."
