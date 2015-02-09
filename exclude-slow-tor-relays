@@ -175,6 +175,7 @@ def main(args):
             if os.path.exists(filepath) and os.path.isfile(filepath):
                 if os.access(filepath, os.R_OK):
                     consensus = filepath
+                    break
                 else:
                     log.info("Your user (%s) can't read the consensus file %s."
                              % (cur_uid, filepath))
