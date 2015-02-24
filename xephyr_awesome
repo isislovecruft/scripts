@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Run Awesome in a nested server for tests
 #
 # Requirements: (Debian)

@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 ##############################################################################
 #
 # install-irssi
@@ -147,7 +147,7 @@ EOF
                 if ! test -r "${build_dir}/transproxy.iptables.sh"; then
                     echo 'Creating iptable transproxy script...'
                     cat>>${build_dir}/transproxy.iptables.sh<<EOF
-#!/bin/bash
+#!/usr/bin/env bash
 #
 # transproxy.iptables.sh
 # ----------------------
