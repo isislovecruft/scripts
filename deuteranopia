@@ -1,0 +1,197 @@
+#!/bin/bash
+###############################################################################
+#
+# deuteranopia
+# --------------
+# mount/unmount LUKS partition
+#
+# @author Isis Agora Lovecruft, 0xa3adb67a2cdb8b35
+# @date 03 December 2014
+# @version 0.0.1
+#______________________________________________________________________________
+# Changelog:
+###############################################################################
+
+# If the partition UUID changes, you can retrieve new one by doing:
+#     $ sudo cryptsetup luksDump /dev/sdb1
+DEUTERANOPIA_PARTUUID="3d4c7174-73cb-41c4-bdaa-1e937a4267fc"
+DEUTERANOPIA_PARTITION=`blkid -U "$DEUTERANOPIA_PARTUUID"`
+DEUTERANOPIA_MAPTO='deuteranopia'
+DEUTERANOPIA_MAPPER="/dev/mapper/$DEUTERANOPIA_MAPTO"
+DEUTERANOPIA_MOUNT="/media/$DEUTERANOPIA_MAPTO"
+
+
+function deuterMount() {
+    mapped=
+    mounted=
+    printf "Opening LUKS container for deuteranopia:\n"
+
+    printf "  Searching for deuteranopia's partition... "
+    if test -n "$DEUTERANOPIA_PARTITION" ; then
+        printf "%s\n" "$DEUTERANOPIA_PARTITION"
+
+        isMapped=`sudo cryptsetup status "${DEUTERANOPIA_MAPTO}" | grep "${DEUTERANOPIA_PARTITION}"`
+        printf "  Checking that %s is not already mapped... " \
+               "${DEUTERANOPIA_MAPTO}"
+        if test -z "$isMapped" ; then
+            printf "ok\n"
+
+            printf "  Checking that %s is not mounted... " \
+                   "$DEUTERANOPIA_PARTITION"
+            if test -z "$(mount | grep $DEUTERANOPIA_PARTITION)" ; then
+                printf "ok\n"
+
+                printf "  Mapping deuteranopia LUKS container %s to '%s'... \n" \
+                       "$DEUTERANOPIA_PARTITION" "$DEUTERANOPIA_MAPTO"
+                sudo cryptsetup luksOpen \
+                     "$DEUTERANOPIA_PARTITION" "$DEUTERANOPIA_MAPTO"
+                if test "$?" -eq "0" ; then
+
+                    printf "  Checking for %s... " "$DEUTERANOPIA_MAPPER"
+                    if test -L "$DEUTERANOPIA_MAPPER" ; then
+                        printf "ok\n"
+                        mapped=true
+                    else
+                        printf "FAIL\n" # couldn't find mapper
+                        printf "ERROR: cryptsetup says %s is mapped, but cannot find %s" \
+                               "$DEUTERANOPIA_MAPTO" "$DEUTERANOPIA_MAPPER"
+                    fi
+                else
+                    printf "FAIL\n" # luksOpen failed
+                fi
+            else
+                printf "FAIL\n" # already mounted
+                mounted=true
+            fi
+        else
+            printf "FAIL\n"   # already mapped
+
+            printf "  Checking for %s... " "$DEUTERANOPIA_MAPPER"
+            if test -L "$DEUTERANOPIA_MAPPER" ; then
+                printf "ok\n"
+                mapped=true
+            else
+                printf "FAIL\n" # couldn't find mapper
+                printf "ERROR: cryptsetup says %s is mapped, but cannot find %s" \
+                       "$DEUTERANOPIA_MAPTO" "$DEUTERANOPIA_MAPPER"
+            fi
+        fi
+
+        if test -z "$mounted" -a -n "$mapped" ; then
+            printf "  Checking that %s is not already mounted... " \
+                   "$DEUTERANOPIA_MAPPER"
+            if test -z "$(mount | grep $DEUTERANOPIA_MAPPER)" ; then
+                printf "ok\n"
+
+                printf "  Mounting %s on %s... " \
+                       "$DEUTERANOPIA_MAPPER" "$DEUTERANOPIA_MOUNT"
+                mount "$DEUTERANOPIA_MOUNT"
+                if test "$?" -eq "0" ; then
+                    printf "ok\n"
+                else
+                    printf "FAIL\n" # mounting failed
+                fi
+
+            else
+                printf "FAIL\n" # Already mounted
+            fi
+        fi
+            
+        printf "  Checking that %s is mounted... " \
+               "$DEUTERANOPIA_PARTITION"
+        if test -n "$(mount | grep $DEUTERANOPIA_MAPPER)" ; then
+            printf "ok\n"
+            mounted=true
+        else
+            printf "FAIL\n" # mounting didn't work
+        fi
+
+    else 
+        printf "FAIL\n"       # partition not found
+        printf "ERROR: Are you sure the drive for %s is connected?\n" \
+               "$DEUTERANOPIA_MAPTO"
+    fi
+}
+
+function deuterUnmount() {
+    mounted=true
+    mapped=true
+    printf "Closing LUKS container for deuteranopia:\n"
+
+    printf "  Searching for deuteranopia's partition... "
+    if test -n "$DEUTERANOPIA_PARTITION" ; then
+        printf "%s\n" "$DEUTERANOPIA_PARTITION"
+
+        printf "  Checking if %s is mounted... " "$DEUTERANOPIA_MAPPER"
+        if test -n "$(mount | grep $DEUTERANOPIA_MAPPER)" ; then
+            printf "ok\n"
+
+            printf "  Unmounting %s... " "$DEUTERANOPIA_MOUNT"
+            umount "$DEUTERANOPIA_MOUNT"
+            if test "$?" -eq "0" ; then
+                printf "ok\n"
+                mounted=
+            else
+                printf "FAIL\n" # unmounting failed
+            fi
+        else
+            printf "FAIL\n" # not mounted
+        fi
+            
+        if test "$mapped" -a -z "$mounted" ; then
+            isMapped=`sudo cryptsetup status "${DEUTERANOPIA_MAPTO}" | grep "${DEUTERANOPIA_PARTITION}"`
+            printf "  Checking if %s is mapped... " "${DEUTERANOPIA_MAPTO}"
+            if test -n "$isMapped" ; then
+                printf "ok\n"
+
+                printf "  Checking for %s... " "$DEUTERANOPIA_MAPPER"
+                if test -L "$DEUTERANOPIA_MAPPER" ; then
+                    printf "ok\n"
+
+                    printf "  Unmapping deuteranopia LUKS container %s... " \
+                           "$DEUTERANOPIA_MAPTO"
+                    sudo cryptsetup luksClose "$DEUTERANOPIA_MAPTO"
+                    if test "$?" -eq "0" ; then
+                        printf "ok\n"
+                    else
+                        printf "FAIL\n" # luksClose failed
+                    fi
+                else
+                    printf "FAIL\n" # couldn't find mapper
+                    printf "ERROR: cryptsetup says %s is mapped, but cannot find %s" \
+                           "$DEUTERANOPIA_MAPTO" "$DEUTERANOPIA_MAPPER"
+                fi
+            else
+                printf "FAIL\n"   # not mapped
+            fi
+        fi
+    else 
+        printf "FAIL\n"       # partition not found
+        printf "ERROR: Are you sure the drive for %s is connected?\n" \
+               "$DEUTERANOPIA_MAPTO"
+    fi
+}
+
+function usage() {
+    prog="${0##*/}"
+    printf "Usage: %s [-m|-u]\n" "$prog"
+    printf "\n"
+    printf "Options:\n"
+    printf "  -m\tMount deuteranopia\n"
+    printf "  -u\tUnmount deuteranopia\n"
+    printf "\n"
+    printf "The default, if called without any arguments, is '%s -m'.\n\n" \
+           "$prog"
+}
+
+if [[ "$#" == "0" ]] ; then
+    deuterMount
+else
+    while getopts umh x; do
+        case $x in
+            u)  deuterUnmount;;
+            m)  deuterMount;;
+            h)  usage;;
+        esac
+    done
+fi
