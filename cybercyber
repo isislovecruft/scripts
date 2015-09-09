@@ -1,0 +1,94 @@
+#!/bin/bash
+# -*- coding: utf-8 -*-
+#------------------------------------------------------------------------------
+#
+# cybercyber
+# ----------
+# A simple cyberscript which cyberpicks a random cyberword from a cyberlist,
+# cyberprepends "cyber" to it, and cyberannouces it with espeak.  Perfect for
+# cyberuse as a cybergeneral cybernotification callback, cybermaking slightly
+# cyberinappropriate cyberremarks at the wrong cybertime.
+#
+# To cyberuse with agl's xmpp-client (https://github.com/agl/xmpp-client),
+# cyberput this into your ~/.xmpp-client cyberconfiguration file:
+#
+#     "NotifyCommand": ["/path/to/cybercyber"],
+#     "IdleSecondsBeforeNotification": 300,
+#
+# Cyberrequirements: espeak
+#
+# :authors: Isis Agora Lovecruft, 0xa3adb67a2cdb8b35
+# :license: MIT licence
+# :version: 0.0.1
+#------------------------------------------------------------------------------
+
+CYBER="activism addict advocacy affair age agent anarchism"
+CYBER=$CYBER" anarchy anarchist apocalypse architecture assault"
+CYBER=$CYBER" attack babble babe banking battle begging blackmail"
+CYBER=$CYBER" boyfriend buddy bullying caliphate capabilities cash celebrity"
+CYBER=$CYBER" censorship chat colonialism command commuter computery conflict"
+CYBER=$CYBER" conspiracy conversation cop cowboy crime critic crook cult"
+CYBER=$CYBER" cyber cybering czar dating death defense dildonic dimension"
+CYBER=$CYBER" discourse doctrine domain economy effects elite"
+CYBER=$CYBER" emergency enterprise environment equivalents exploitation"
+CYBER=$CYBER" erotic espionage ethics evangelist extortion fashion feminism"
+CYBER=$CYBER" flaneur flirting forces forensics fraud freak freedom"
+CYBER=$CYBER" friend funeral future gambling gaming gang geek generation"
+CYBER=$CYBER" ghetto girlfriend goths government group hacker"
+CYBER=$CYBER" harassment hatred heaven heist hero hug identity"
+CYBER=$CYBER" immorality imperialism industry information infrastructure"
+CYBER=$CYBER" intelligence intruder intrusion issues jargon jihad jihadi"
+CYBER=$CYBER" journalism junk junkie kid laundering law libertarian"
+CYBER=$CYBER" liberty literacy loafing looting locker loser lover"
+CYBER=$CYBER" marketplace marriage martyr media mob money mosque nation"
+CYBER=$CYBER" naut nerd network operations ostracism payment peer person"
+CYBER=$CYBER" philosopher phobia pioneer piracy pirate police"
+CYBER=$CYBER" politics porn pornography president"
+CYBER=$CYBER" privacy prostitute protest punk revolution romance"
+CYBER=$CYBER" sabotage scam security sex sexual shopper slacker"
+CYBER=$CYBER" slut smut space spacetime sphere spy squatter "
+CYBER=$CYBER" sqatting stalker stalking strategy"
+CYBER=$CYBER" stud team terrorism terrorist theft thief threat"
+CYBER=$CYBER" thug trail trash trespasser utopia villain war warfare"
+CYBER=$CYBER" warrior weapon wizard"
+
+CYBER_LIST=($CYBER)
+CYBER_LENGTH=${#CYBER_LIST[@]}
+CYBER_WORD="${CYBER_LIST[$((RANDOM%CYBER_LENGTH))]}"
+
+function usage ()
+{
+    printf '%s [OPTIONS]\n\n' "$(basename $0)"
+    printf 'OPTIONS\n'
+    printf -- '-h\t\tThis cruft.\n'
+    printf -- '-a\t\tAll of the cybercybers!\n'
+    printf -- "-q\t\tDon't print to stdout.\n" 
+}
+
+function allofthecybers ()
+{
+    for CYBER_WORD in $CYBER ; do
+        printf " Cyber${CYBER_WORD}!\n"
+        espeak -x --ipa=1 -s 130 -k 20 -p 25 "Cyber${CYBER_WORD}!" 2>/dev/null
+    done
+}
+
+quiet=
+
+while getopts haq f; do
+    case $f in
+        h)  usage ; exit 0 ;;
+        a) allofthecybers ; shift ;;
+        q) quiet=1 ;;
+        # don't we need `shift 2` above? or `shift $(( OPTIND - 1))`?
+    esac
+done
+
+if test -z "$quiet" ; then
+    printf " Cyber${CYBER_WORD}!\n"
+    espeak -x --ipa=1 -s 130 -k 20 -p 25 "Cyber${CYBER_WORD}!" 2>/dev/null
+else
+    espeak -x --ipa=1 -s 130 -k 20 -p 25 "Cyber${CYBER_WORD}!" 1>/dev/null 2>&1
+fi
+
+exit $?
