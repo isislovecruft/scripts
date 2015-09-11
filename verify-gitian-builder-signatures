@@ -52,17 +52,18 @@ else
     exit 1
 fi
 
-sums='sha256sums.txt'
+sums=$(find . -type f -regextype posix-extended \
+       -regex "(.*sha256sums)(-unsigned-build)?(\.txt)" -printf "%f " | tr -d '[[:space:]]')
 # TODO: Verify signatures for incremental (.mar) files, they are named like
 #       (.*sha256sums\.incrementals\.txt)(.*)(\.asc)
 gitian_sigs=$(find . -type f -regextype posix-extended \
-              -regex "(.*sha256sums\.txt)(.*)(\.asc)" -printf "%f ")
+              -regex "(.*sha256sums)(-unsigned-build)?(\.txt)(.*)(\.asc)" -printf "%f ")
 debug_sigs=$(find . -type f -regextype posix-extended \
              -regex ".*(tor-)(browser-)?(.*)(debug)(.*)(\.asc)" -printf "%f ")
 debug_files=
 tbbs=$(find . -type f -regextype posix-extended \
        -regex ".*([tT]or)(-)?([bB]rowser-)(install)?(.*)(\.)(tar\.xz|dmg|exe){1}" \
-       -printf "%f ")
+       -printf "%f " | tr -d '[[:space:]]')
 
 red="$(tput setaf 1)"
 green="$(tput setaf 10)"
@@ -114,10 +115,10 @@ for tbb in ${tbbs} ; do
     if test "$returncode" -ne "0" ; then
         printf "\t[%sERROR%s]\n" "$red" "$reset"
         printf "\n%sWARNING%s: The sha256sum of your Tor Browser Bundle, " "$red" "$reset"
-        printf "'%s', does NOT MATCH the corresponding one " "$tbb_tarball"
+        printf "'%s', does NOT MATCH the corresponding one " "$tbb"
         printf "given in %s!\n\n" "$sums"
         printf "Perhaps there was an error downloading it. Please try "
-        printf "re-downloading $s and running this check again." "$tbb_tarball"
+        printf "re-downloading $s and running this check again." "$tbb"
         printf "\n\n"
         exit 2
     elif test "$returncode" -eq "0" ; then
@@ -146,56 +147,57 @@ done
 printf "\n%sAll sha256sums and signatures for Tor Browser downloads checked " "$green"
 printf "out OKAY!%s\n" "$reset"
 
+if test -n "${debug_sigs}" ; then
+    printf "――――――――――――――――――――――――\n"
+    printf "Checking all signatures on debug symbols…\n\n"
 
-printf "――――――――――――――――――――――――\n"
-printf "Checking all signatures on debug symbols…\n\n"
+    # And... check the signatures on debug symbol tarballs:
+    for sig in ${debug_sigs} ; do
+        psig="$green$sig$reset" # Add some colour
+        debug_file="${sig%%.asc}"
+        debug_files="${debug_files} $debug_file"
+        pver="$lavender$debug_file$reset"
+        printf "Verifying signature file %s for %s… " "$psig" "$pver"
 
-# And... check the signatures on debug symbol tarballs:
-for sig in ${debug_sigs} ; do
-    psig="$green$sig$reset" # Add some colour
-    debug_file="${sig%%.asc}"
-    debug_files="${debug_files} $debug_file"
-    pver="$lavender$debug_file$reset"
-    printf "Verifying signature file %s for %s… " "$psig" "$pver"
+        valid=`gpg2 --quiet --status-fd 1 --verify $sig $debug_file 2>/dev/null | grep "VALIDSIG"`
+        returncode="$?"
 
-    valid=`gpg2 --quiet --status-fd 1 --verify $sig $debug_file 2>/dev/null | grep "VALIDSIG"`
-    returncode="$?"
-
-    # Exit noisily if one of the debug signatures was not okay:
-    if test "$returncode" -ne "0" ; then
-        printf "\t[%sERROR%s]\n" "$red" "$reset"
-        printf "Exiting…\n"
-        exit 2
-    elif test "$returncode" -eq "0" -a -n "$valid" ; then
-        printf "\t[%sOKAY%s]\n" "$green" "$reset"
-    fi
-done
-
+        # Exit noisily if one of the debug signatures was not okay:
+        if test "$returncode" -ne "0" ; then
+            printf "\t[%sERROR%s]\n" "$red" "$reset"
+            printf "Exiting…\n"
+            exit 2
+        elif test "$returncode" -eq "0" -a -n "$valid" ; then
+            printf "\t[%sOKAY%s]\n" "$green" "$reset"
+        fi
+    done
 printf "\n%sAll signatures for Tor Browser debug symbols downloads checked " "$green"
 printf "out OKAY!%s\n" "$reset"
+fi
 
 # Exit now if we're not extracting
 test -z "$do_extract" && exit 0
 
-tbb_tarball=$(find . -type f -regextype posix-extended \
-              -regex ".*(tor-browser-)(.*)(\.)(tar\.xz){1}" -printf "%f")
-
 printf "――――――――――――――――――――――――\n"
-printf "Extracting all files for %s%s%s…\n\n" "$lavender" "$tbb_tarball" "$reset"
 
-printf "Extracting %s%s%s…\n" "$lavender" "$tbb_tarball" "$reset"
-tar Jxf "$tbb_tarball"
+for tbb in ${tbbs} ; do
+    printf "Extracting all files for %s%s%s…\n\n" "$lavender" "$tbb" "$reset"
 
-for debugfile in ${debug_files} ; do
-    printf "Extracting debug symbols from %s%s%s…\n" "$lavender" "$debugfile" "$reset"
-    unzip -qq "$debugfile"
+    printf "Extracting %s%s%s…\n" "$lavender" "$tbb" "$reset"
+    tar Jxf "$tbb"
+
+    for debugfile in ${debug_files} ; do
+        printf "Extracting debug symbols from %s%s%s…\n" "$lavender" "$debugfile" "$reset"
+        unzip -qq "$debugfile"
+    done
+
+    if test -d "Debug" ; then
+        printf "Moving Debug/ directory to tor-browser_en-US/Debug/ …\n"
+        mv Debug tor-browser_en-US/
+    fi
+    printf "\n%sExtraction complete!%s\n" "$green" "$reset"
 done
 
-if test -d "Debug" ; then
-    printf "Moving Debug/ directory to tor-browser_en-US/Debug/ …\n"
-    mv Debug tor-browser_en-US/
-fi
-printf "\n%sExtraction complete!%s\n" "$green" "$reset"
 printf "――――――――――――――――――――――――\n"
 
 exit 0
