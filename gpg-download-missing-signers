@@ -1,0 +1,27 @@
+#!/bin/bash
+#-----------------------------------------------------------------------------
+# gpg-download-missing-signers
+# ----------------------------
+# Given Alice's public key, you check the signatures and see a bunch of
+# [User ID not found]s. This script retrieves (over tor) all of the
+# [User ID not found] keys, given Alice's key.
+#
+# Taken from the GnuPG FAQ, "Advanced Topics" section.
+#
+# :authors: Isis Agora Lovecruft, 0xa3adb67a2cdb8b35
+# :license: AGPLv3, see https://www.gnu.org/licenses/agpl-3.0.txt for text
+# :date: 2011-12-21
+# :version: 0.0.1
+#-----------------------------------------------------------------------------
+
+
+if [ "$#" != "1" ] ; then
+    printf "Please give an OpenPGP keyid as an argument.\n"
+    exit 1
+fi
+
+printf "Downloading missing signing keys for %s...\n" "$1"
+
+gpg2 --check-sigs --with-colon $1 \
+    | awk -F: '$1 == "sig" && $2 == "?"  { print $5 }' \
+    | sort | uniq | xargs torsocks gpg2 --recv-keys
