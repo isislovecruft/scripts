@@ -25,32 +25,32 @@
 CYBER="activism addict advocacy affair age agent anarchism"
 CYBER=$CYBER" anarchy anarchist apocalypse architecture assault"
 CYBER=$CYBER" attack babble babe banking battle begging blackmail"
-CYBER=$CYBER" boyfriend buddy bullying caliphate capabilities cash celebrity"
+CYBER=$CYBER" boyfriend bro buddy bullying caliphate capabilities cash"
 CYBER=$CYBER" censorship chat colonialism command commuter computery conflict"
-CYBER=$CYBER" conspiracy conversation cop cowboy crime critic crook cult"
+CYBER=$CYBER" celebrity conspiracy conversation cop cowboy crime critic crook cult"
 CYBER=$CYBER" cyber cybering czar dating death defense dildonic dimension"
-CYBER=$CYBER" discourse doctrine domain economy effects elite"
+CYBER=$CYBER" discourse defense doctrine domain economy effects elite"
 CYBER=$CYBER" emergency enterprise environment equivalents exploitation"
-CYBER=$CYBER" erotic espionage ethics evangelist extortion fashion feminism"
-CYBER=$CYBER" flaneur flirting forces forensics fraud freak freedom"
+CYBER=$CYBER" erotic espionage ethics evangelist explosion extortion fashion"
+CYBER=$CYBER" feminism flaneur flirting forces forensics fraud freak freedom"
 CYBER=$CYBER" friend funeral future gambling gaming gang geek generation"
 CYBER=$CYBER" ghetto girlfriend goths government group hacker"
-CYBER=$CYBER" harassment hatred heaven heist hero hug identity"
+CYBER=$CYBER" harassment hatred ho heaven heist hero heroin hug identity"
 CYBER=$CYBER" immorality imperialism industry information infrastructure"
 CYBER=$CYBER" intelligence intruder intrusion issues jargon jihad jihadi"
 CYBER=$CYBER" journalism junk junkie kid laundering law libertarian"
 CYBER=$CYBER" liberty literacy loafing looting locker loser lover"
 CYBER=$CYBER" marketplace marriage martyr media mob money mosque nation"
-CYBER=$CYBER" naut nerd network operations ostracism payment peer person"
-CYBER=$CYBER" philosopher phobia pioneer piracy pirate police"
+CYBER=$CYBER" naut nerd network operations ninja ostracism payment peer penetration"
+CYBER=$CYBER" person philosopher phobia pioneer piracy pirate police"
 CYBER=$CYBER" politics porn pornography president"
-CYBER=$CYBER" privacy prostitute protest punk revolution romance"
-CYBER=$CYBER" sabotage scam security sex sexual shopper slacker"
+CYBER=$CYBER" privacy prostitute protest punk revolution rific romance"
+CYBER=$CYBER" sabotage scam security sex sexual shame shopper slacker samurai"
 CYBER=$CYBER" slut smut space spacetime sphere spy squatter "
 CYBER=$CYBER" squatting stalker stalking strategy"
 CYBER=$CYBER" stud team terrorism terrorist theft thief threat"
 CYBER=$CYBER" thug trail trash trespasser utopia villain war warfare"
-CYBER=$CYBER" warrior weapon wizard"
+CYBER=$CYBER" warrior weapon wizard witchcraft"
 
 CYBER_LIST=($CYBER)
 CYBER_LENGTH=${#CYBER_LIST[@]}
@@ -62,7 +62,7 @@ function usage ()
     printf 'OPTIONS\n'
     printf -- '-h\t\tThis cruft.\n'
     printf -- '-a\t\tAll of the cybercybers!\n'
-    printf -- "-q\t\tDon't print to stdout.\n" 
+    printf -- "-q\t\tDon't print to stdout.\n"
 }
 
 function allofthecybers ()
