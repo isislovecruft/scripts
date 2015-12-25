@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+
+# cd /home/isis/code/sources/openssl && \
+#     { make clean ; make clean-shared;} || echo "ALREADY CLEAN" && \
+#     git stash save && git stash drop stash@{0} && \
+#     git checkout master && \
+#     git fetch --all && \
+#     git merge --ff-only origin/master && \
+#     git checkout OpenSSL_1_0_2-stable && \
+#     git merge --ff-only origin/OpenSSL_1_0_2-stable && \
+#     ./config threads shared --prefix=/usr/local/ \
+#     --openssldir=/usr/local/openssl -DENGINEDYNAMIC_SUPPORT -DREENTRANT && \
+#     make depend && make && make test && \
+#     sudo make install
+
+if test -f "src/or/tor" ; then
+    printf "Previously built Tor binary already found. Running make clean...\n"
+    make clean #&& make distclean
+fi
+
+if [[ "$#" != "1" ]] ; then
+    printf "Adding program suffix based on last git tag...\n"
+
+    LAST_TAG=`git describe --abbrev=0 --tags`
+    SUFFIX="-${LAST_TAG##tor-}"
+
+    read -p"The last git tag was '${LAST_TAG}'.\
+ Use '${SUFFIX}' for program suffix? (Y/n) "
+    case $REPLY in
+        N|n)   read -p"Please specify suffix: " SUFFIX
+               ;;
+        *)     ;;
+    esac
+else
+    SUFFIX="${1}"
+fi
+printf "Okay, using '%s' as program suffix.\n" "${SUFFIX}"
+
+#./autogen.sh && \
+./configure --program-suffix="$SUFFIX" \
+    --with-tor-user=tor --with-tor-group=tor \
+    --enable-gcc-warnings-advisory && \
+    make -j 10 && \
+    make -j 10 test
+
+printf "Compilation finished!\n\n"
+read -p"Install tor${SUFFIX} now? (Y/n) "
+case $REPLY in
+    N|n)   ;;
+    *)     printf "Installing... "
+           sudo make install
+           ;;
+esac
+
+printf "All done! Have a good night, and hack the planet.\n"
+
+    #--with-openssl-dir=/usr/local/lib --enable-static-openssl \
