@@ -1,0 +1,95 @@
+#!/bin/bash
+# -*- coding: utf-8 -*-
+#------------------------------------------------------------------------------
+#
+# quantumquantum
+# ----------
+# A simple quantumscript which quantumpicks a random quantumword from a quantumlist,
+# quantumprepends "quantum" to it, and quantumannouces it with espeak.  Perfect for
+# quantumuse as a quantumgeneral quantumnotification callback, quantummaking slightly
+# quantuminappropriate quantumremarks at the wrong quantumtime.
+#
+# To quantumuse with agl's xmpp-client (https://github.com/agl/xmpp-client),
+# quantumput this into your ~/.xmpp-client quantumconfiguration file:
+#
+#     "NotifyCommand": ["/path/to/quantumquantum"],
+#     "IdleSecondsBeforeNotification": 300,
+#
+# Quantumrequirements: espeak
+#
+# :authors: Isis Agora Lovecruft, 0xa3adb67a2cdb8b35
+# :license: MIT licence
+# :version: 0.0.1
+#------------------------------------------------------------------------------
+
+QUANTUM="activism addict advocacy affair age agent anarchism"
+QUANTUM=$QUANTUM" anarchy anarchist apocalypse architecture assault"
+QUANTUM=$QUANTUM" attack babble babe banking battle begging blackmail"
+QUANTUM=$QUANTUM" boyfriend bro buddy bullying caliphate capabilities cash"
+QUANTUM=$QUANTUM" censorship chat colonialism command commuter computery conflict"
+QUANTUM=$QUANTUM" celebrity conspiracy conversation cop cowboy crime critic crook cult"
+QUANTUM=$QUANTUM" quantum quantuming czar dating death defense dildonic dimension"
+QUANTUM=$QUANTUM" discourse defense doctrine domain economy effects elite"
+QUANTUM=$QUANTUM" emergency enterprise environment equivalents exploitation"
+QUANTUM=$QUANTUM" erotic espionage ethics evangelist explosion extortion fashion"
+QUANTUM=$QUANTUM" feminism flaneur flirting forces forensics fraud freak freedom"
+QUANTUM=$QUANTUM" friend funeral future gambling gaming gang geek generation"
+QUANTUM=$QUANTUM" ghetto girlfriend goths government group hacker"
+QUANTUM=$QUANTUM" harassment hatred ho heaven heist hero heroin hug identity"
+QUANTUM=$QUANTUM" immorality imperialism industry information infrastructure"
+QUANTUM=$QUANTUM" intelligence intruder intrusion issues jargon jihad jihadi"
+QUANTUM=$QUANTUM" journalism junk junkie kid laundering law libertarian"
+QUANTUM=$QUANTUM" liberty literacy loafing looting locker loser lover"
+QUANTUM=$QUANTUM" marketplace marriage martyr media mob money mosque nation"
+QUANTUM=$QUANTUM" naut nerd network operations ninja ostracism payment peer penetration"
+QUANTUM=$QUANTUM" person physical philosopher phobia pioneer piracy pirate police"
+QUANTUM=$QUANTUM" politics porn pornography president"
+QUANTUM=$QUANTUM" privacy prostitute protest punk revolution rific romance"
+QUANTUM=$QUANTUM" sabotage scam security sex sexual shame shopper slacker samurai"
+QUANTUM=$QUANTUM" slut smut space spacetime sphere spy squatter "
+QUANTUM=$QUANTUM" squatting stalker stalking strategy"
+QUANTUM=$QUANTUM" stud team terrorism terrorist theft thief threat"
+QUANTUM=$QUANTUM" thug trail trash trespasser utopia villain war warfare"
+QUANTUM=$QUANTUM" warrior weapon wizard witchcraft"
+
+QUANTUM_LIST=($QUANTUM)
+QUANTUM_LENGTH=${#QUANTUM_LIST[@]}
+QUANTUM_WORD="${QUANTUM_LIST[$((RANDOM%QUANTUM_LENGTH))]}"
+
+function usage ()
+{
+    printf '%s [OPTIONS]\n\n' "$(basename $0)"
+    printf 'OPTIONS\n'
+    printf -- '-h\t\tThis cruft.\n'
+    printf -- '-a\t\tAll of the quantumquantums!\n'
+    printf -- "-q\t\tDon't print to stdout.\n"
+}
+
+function allofthequantums ()
+{
+    for QUANTUM_WORD in $QUANTUM ; do
+        printf " Quantum${QUANTUM_WORD}!\n"
+        espeak -x --ipa=1 -s 130 -k 20 -p 25 "Quantum${QUANTUM_WORD}!" 2>/dev/null
+    done
+}
+
+quiet=1
+
+while getopts haqv f; do
+    case $f in
+        h)  usage ; exit 0 ;;
+        a) allofthequantums ; shift ;;
+        q) quiet=1 ;;
+        v) quiet=  ;;
+        # don't we need `shift 2` above? or `shift $(( OPTIND - 1))`?
+    esac
+done
+
+if test -z "$quiet" ; then
+    printf " Quantum${QUANTUM_WORD}!\n"
+    espeak -x --ipa=1 -s 130 -k 20 -p 25 "Quantum${QUANTUM_WORD}!" 2>/dev/null
+else
+    espeak -x --ipa=1 -s 130 -k 20 -p 25 "Quantum${QUANTUM_WORD}!" 1>/dev/null 2>&1
+fi
+
+exit 0
