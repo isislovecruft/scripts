@@ -151,7 +151,7 @@ for commit in $span ; do
         grep -o -E "key ID [0-9A-Fa-f]{8,16}" | \
         cut -d ' ' -f 3 )
 
-    fpr_signing_keyid= $(gpg --fingerprint $signing_keyid | \
+    fpr_signing_keyid=$(gpg --fingerprint "$signing_keyid" | \
         grep -o -E "([0-9A-F]{4}[[:space:]]{0,2}){10}")
 
     ## the following is the short reference name for tags, i.e. 'v0.1.2' in
