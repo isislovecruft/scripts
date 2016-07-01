@@ -131,6 +131,34 @@ else
     span=$(git rev-list ^$rev_old $rev_new)
 fi
 
+if [ "$allowcommitsonmaster" != "true" ]; then
+    ## the only commits allowed on master are merges which have rev_old as
+    ## a direct parent of rev_new
+    ##
+    ## we have to check this in a separate step, since "git rev-list
+    ## ^rev_old rev_new" on master at the merge of a feature branch will
+    ## also give us all the commits on the feature branch, and we won't
+    ## have enough context while looping through those commits to do this
+    ## check properly
+    if [ "$ref" = "refs/heads/master" ]; then
+        ## if rev_new isn't a merge, it will only have one parent and
+        ## this "git show" command will return nothing
+        parents=$(git show --merges --no-patch --format=%P $rev_new)
+        old_is_parent_of_new=false
+        for parent in $parents ; do
+            if [ "$rev_old" = "$parent" ]; then
+                old_is_parent_of_new=true
+                break
+            fi
+        done
+
+        if [ "$old_is_parent_of_new" != "true" ]; then
+            echo "*** Master only accepts merges of feature branches" >&2
+            exit 1
+        fi
+    fi
+fi
+
 ## for all the commits in the series, check the type of the commit against the
 ## commit directly before it:
 rev_cur=$rev_old                   ## set the current rev to the previous HEAD
@@ -191,12 +219,25 @@ for commit in $span ; do
     short_ref=${ref##refs/tags/}
 
     case "$ref","$commit_type" in
-        refs/heads/master,commit)
-            ## do not allow commits directly onto master
-            if [ "$allowcommitsonmaster" != "true" ]; then
-                echo "*** The non-merge commit $commit is not allowed to be pushed to master" >&2
-                echo "*** Branch master can only take merge commits from branches develop/* and release-* " >&2
+        refs/heads/*,commit)
+            ## commit on any branch
+            if [ "$rev_old" = "$zero" -a "$denycreatebranch" = "true" ]; then
+                echo "*** Creating a branch is not allowed in this repository" >&2
                 exit 1
+            fi
+
+            if [ "$allowunsignedcommits" != "true" ]; then
+                if [ -n "$has_good_sig" ]; then
+                    echo "*** Bad signature on commit $commit" >&2
+                    exit 1
+                fi
+
+                if is_allowed_signer $signing_keyid; then
+                    echo "*** Good signature on commit $commit by signing key $signing_keyid" >&2
+                else
+                    echo "*** Key $signing_keyid is not allowed to sign commit $commit" >&2
+                    exit 1
+                fi
             fi
             ;;
         refs/heads/master,merge)
@@ -205,25 +246,34 @@ for commit in $span ; do
                 echo "*** Branch master only takes merge commits originating from develop/* or release-* branches" >&2
                 exit 1
             else
-                allowed_keyid=false
-                if test -n "$has_good_sig" -a -n "$signing_keyid" ; then
+                if [ "$allowunsignedcommits" != "true" ]; then
+                    if [ -n "$has_good_sig" -a -n "$signing_keyid" ]; then
+                        if is_allowed_signer $signing_keyid; then
+                            echo "*** Good signature on merge $commit by signing key $signing_keyid" >&2
+                        else
+                            echo "*** Key $signing_keyid is not allowed to sign merge $commit" >&2
+                            exit 1
+                        fi
+                    else
+                        echo "*** Merges must be signed with an authorised key" >&2
+                        exit 1
+                    fi
+                fi
+            fi
+            ;;
+        refs/heads/*,merge)
+            ## merge into non-master branch
+            if [ "$allowunsignedcommits" != "true" ]; then
+                if [ -n "$has_good_sig" -a -n "$signing_keyid" ]; then
                     if is_allowed_signer $signing_keyid; then
                         echo "*** Good signature on merge $commit by signing key $signing_keyid" >&2
-                        allowed_keyid=true
                     else
                         echo "*** Key $signing_keyid is not allowed to sign merge $commit" >&2
-                        allowed_keyid=false
+                        exit 1
                     fi
                 else
-                    echo "*** Missing or bad signature on commit $commit" >&2
-                fi
-
-                if ! $allowed_keyid ; then
-                    echo "*** Merges to master can only be made from branches with names beginning with release-* or develop/*" >&2
-                    echo "*** and must be signed with one of the following keys:" >&2
-                    for key in "${trusted_keys[@]}"; do
-                        echo "*** $key" >&2
-                    done
+                    echo "*** Merges must be signed with an authorised key" >&2
+                    exit 1
                 fi
             fi
             ;;
@@ -279,13 +329,6 @@ for commit in $span ; do
                     done
                     exit 1
                 fi
-            fi
-            ;;
-        refs/heads/*,commit)
-            ## commit on a non-master branch
-            if [ "$rev_old" = "$zero" -a "$denycreatebranch" = "true" ]; then
-                echo "*** Creating a branch is not allowed in this repository" >&2
-                exit 1
             fi
             ;;
         refs/remotes/*,commit)
