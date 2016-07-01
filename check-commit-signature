@@ -87,7 +87,17 @@ done
 ref=$1
 rev_old=$2
 rev_new=$3
-span=$(git rev-list ^$rev_old $rev_new)
+
+## a hash full of zeroes is how Git represents "nothing"
+zero="0000000000000000000000000000000000000000"
+
+## get all new commits on branch ref, even if it's a new branch
+if [ "$rev_old" = "$zero" ]; then
+    # list everything reachable from rev_new but not any heads
+    span=$(git rev-list $rev_new --not --branches='*')
+else
+    span=$(git rev-list ^$rev_old $rev_new)
+fi
 
 ## for all the commits in the series, check the type of the commit against the
 ## commit directly before it:
@@ -102,8 +112,6 @@ for commit in "$span" ; do
     fi
 
     ## get the commit type of the current rev:
-    ## a commit with a hash full of zeros is a deletion of a ref
-    zero="0000000000000000000000000000000000000000"
     merge=$(git rev-list -n 1 --merges "$rev_cur".."$commit")
     if [ "$commit" = "$zero" ]; then
         commit_type=delete
