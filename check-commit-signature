@@ -13,6 +13,9 @@
 # hooks.allowunsignedcommits
 #   This boolean sets whether unsigned tags, and merges with unsigned commits
 #   into master, are allowed. By default, they are not allowed.
+# hooks.allowunsignedtags
+#   This boolean sets whether unsigned tags are allowed. By default,
+#   they are not allowed.
 # hooks.allowcommitsonmaster
 #   This boolean sets whether non-merge commits are allowed on master. By
 #   default, these are not allowed.
@@ -43,6 +46,7 @@
 ## server config
 ##################
 allowunsignedcommits=$(git config --bool hooks.allowunsignedcommits)
+allowunsignedtags=$(git config --bool hooks.allowunsignedtags)
 allowcommitsonmaster=$(git config --bool hooks.allowcommitsonmaster)
 allowhotfixonmaster=$(git config --bool hooks.allowhotfixonmaster)
 allowdeletebranch=$(git config --bool hooks.allowdeletebranch)
@@ -120,6 +124,10 @@ ref=$1
 rev_old=$2
 rev_new=$3
 
+## the following is the short reference name for tags, i.e. 'v0.1.2' in
+## lieu of 'refs/tags/v0.1.2':
+short_ref=${ref##refs/tags/}
+
 ## a hash full of zeroes is how Git represents "nothing"
 zero="0000000000000000000000000000000000000000"
 
@@ -157,6 +165,57 @@ if [ "$allowcommitsonmaster" != "true" ]; then
             exit 1
         fi
     fi
+fi
+
+if [ -z "$span" ]; then
+    ## rev_new pointed to something considered by "git rev-list" to be
+    ## already in the commit graph, which could be a commit (if we're
+    ## adding a lightweight tag) or a tag object (if we're adding an
+    ## annotated tag), since "git rev-list" doesn't consider the tag
+    ## object to be separate from the commit it points to
+
+    type=$(git cat-file -t $rev_new)
+    case $type in
+        commit)
+            ## lightweight tag
+            if [ "$allowunsignedtags" != "true" -o "$allowunannotated" != "true" ]; then
+                echo "*** The un-annotated tag $short_ref is not allowed in this repository" >&2
+                echo "*** Use 'git tag [ -a | -s ]' for tags you want to propagate." >&2
+                exit 1
+            fi
+            ;;
+        tag)
+            ## annotated tag
+            if [ "$rev_old" != $zero -a "$allowmodifytag" != "true" ]; then
+                echo "*** Tag $short_ref already exists." >&2
+                echo "*** Modifying a tag is not allowed in this repository." >&2
+                exit 1
+            else
+                if [ "$allowunsignedtags" != "true" ]; then
+                    result=$(git verify-tag $rev_new 2>&1 >/dev/null)
+                    if ! grep '^gpg: Good signature' <<< "$result"; then
+                        echo "*** Tag $short_ref is not signed" >&2w
+                        exit 1
+                    fi
+
+                    signing_keyid=$(<<<"$result" grep "^gpg: Signature made" | \
+                        grep -o -E "key ID [0-9A-Fa-f]{8,16}" | \
+                        cut -d ' ' -f 3 )
+
+                    if is_allowed_signer $signing_keyid; then
+                        echo "*** Good signature on tag $short_ref by signing key $signing_keyid" >&2
+                    else
+                        echo "*** Rejecting tag $short_ref due to lack of a valid GPG signature" >&2w
+                        exit 1
+                    fi
+                fi
+            fi
+            ;;
+        *)
+            echo "*** No new commits, but the pushed ref $ref is a \"$type\" instead of a tag? I'm confused." >&2
+            exit 1
+            ;;
+    esac
 fi
 
 ## for all the commits in the series, check the type of the commit against the
@@ -213,10 +272,6 @@ for commit in $span ; do
 
     fpr_signing_keyid=$(gpg --fingerprint "$signing_keyid" | \
         grep -o -E "([0-9A-F]{4}[[:space:]]{0,2}){10}")
-
-    ## the following is the short reference name for tags, i.e. 'v0.1.2' in
-    ## lieu of 'refs/tags/v0.1.2':
-    short_ref=${ref##refs/tags/}
 
     case "$ref","$commit_type" in
         refs/heads/*,commit)
@@ -289,46 +344,11 @@ for commit in $span ; do
             echo "*** Branch master only takes merge commits originating from develop/* or release-* branches" >&2
             exit 1
             ;;
-        refs/tags/*,commit)
-            ## un-annotated tag
-            if [ "$allowunannotated" != "true" ]; then
-                echo "*** The un-annotated tag, ${short_ref}, is not allowed in this repository" >&2
-                echo "*** Use 'git tag [ -a | -s ]' for tags you want to propagate." >&2
-                exit 1
-            fi
-            ;;
         refs/tags/*,delete)
             ## delete tag
             if [ "$allowdeletetag" != "true" ]; then
                 echo "*** Deleting a tag is not allowed in this repository" >&2
                 exit 1
-            fi
-            ;;
-        refs/tags/*,tag)
-            ## annotated tag
-            if [ "$allowmodifytag" != "true" ] && git rev-parse "$ref" > /dev/null 2>&1 ; then
-                echo "*** Tag $shortref already exists." >&2
-                echo "*** Modifying a tag is not allowed in this repository." >&2
-                exit 1
-            else
-                ## if it's a tag, check that it's GPG signed
-
-                allowed_keyid=false
-                for keyid in "${trusted_keys[@]}"; do
-                    if test -n "$(git tag --verify $ref 2>&1 >/dev/null | grep '^gpg:' | grep $keyid )"; then
-                        allowed_keyid=true
-                    fi
-                done
-
-                if [[ "$authorized" == "false" ]]; then
-                    echo "*** Rejecting tag $short_ref due to lack of a valid GPG signature" >&2
-                    echo "*** Authors and keys allowed to create tags on this repo:" >&2
-                    for collab in "${!collaborators[@]}"; do
-                        keyid="${collaborators["$collab"]}"
-                        echo "*** $collab $key " >&2
-                    done
-                    exit 1
-                fi
             fi
             ;;
         refs/remotes/*,commit)
