@@ -81,6 +81,38 @@ for collab in "${!collaborators[@]}"; do
     #trusted_keys["$collab"]="$longid"
 done
 
+is_allowed_signer() {
+    signing_keyid=$1
+
+    if [ -z "$signing_keyid" ]; then
+        echo "*** Error: is_allowed_signer(): No key ID supplied" >&2
+        return 1
+    fi
+
+    fpr_signing_keyid=$(gpg --fingerprint "$signing_keyid" | \
+        grep -o -E "([0-9A-F]{4}[[:space:]]{0,2}){10}")
+
+    allowed_keyid=1
+
+    for collab in "${!trusted_keys[@]}"; do
+        ## XXX the $keyid is currently only a short key id
+        ## because git doesn't give us a way to ask for a
+        ## long keyid
+        keyid="${trusted_keys["$collab"]}"
+        if [ "$signing_keyid" = "$keyid" ]; then
+            ## check that the fingerprint of the key that
+            ## gave us a good signature matches the
+            ## hardcoded ones:
+            if [ "$fpr_signing_keyid" = "${collaborators["$collab"]}" ]; then
+                allowed_keyid=0
+                break
+            fi
+        fi
+    done
+
+    return $allowed_keyid
+}
+
 ## $1 is the git ref which is being revised
 ## $2 is the last HEAD
 ## $3 is the HEAD commit of the series of commits being applied
@@ -175,21 +207,13 @@ for commit in $span ; do
             else
                 allowed_keyid=false
                 if test -n "$has_good_sig" -a -n "$signing_keyid" ; then
-                    for collab in "${!trusted_keys[@]}"; do
-                        ## XXX the $keyid is currently only a short key id
-                        ## because git doesn't give us a way to ask for a
-                        ## long keyid
-                        keyid="${trusted_keys["$collab"]}"
-                        if [[ "$signing_keyid" == "$keyid" ]]; then
-                            ## check that the fingerprint of the key that
-                            ## gave us a good signature matches the
-                            ## hardcoded ones:
-                            if [[ "$fpr_signing_keyid" == "${collaborators["$collab"]}" ]]; then
-                                allowed_keyid=true
-                                echo "*** Good signature on commit $commit made by $collab with signing key $signing_key " >&2
-                            fi
-                        fi
-                    done
+                    if is_allowed_signer $signing_keyid; then
+                        echo "*** Good signature on merge $commit by signing key $signing_keyid" >&2
+                        allowed_keyid=true
+                    else
+                        echo "*** Key $signing_keyid is not allowed to sign merge $commit" >&2
+                        allowed_keyid=false
+                    fi
                 else
                     echo "*** Missing or bad signature on commit $commit" >&2
                 fi
