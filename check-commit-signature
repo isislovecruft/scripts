@@ -102,7 +102,7 @@ fi
 ## for all the commits in the series, check the type of the commit against the
 ## commit directly before it:
 rev_cur=$rev_old                   ## set the current rev to the previous HEAD
-for commit in "$span" ; do
+for commit in $span ; do
 
     ## check that the current revison object is a hexidecimal hash of length 40
     check_rev=$(git rev-parse --verify "$commit")
