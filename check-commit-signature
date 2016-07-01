@@ -139,15 +139,15 @@ for commit in $span ; do
     is_from_release=$(git branch --contains "$commit" | grep release )
 
     ## the following returns non-null if $rev_cur is a signed tag:
-    is_signed_tag=$(git tag --verify "$ref" | grep gpg: )
+    is_signed_tag=$(git tag --verify "$ref" 2>&1 >/dev/null | grep '^gpg: Good signature')
 
     ## the following returns non-null if $rev_cur has a signature, and gpg reports
     ## the signature is good:
-    has_good_sig=$(git log --format=%H --show-signature "$commit" | grep "Good signature")
+    has_good_sig=$(git show --no-patch --format=%H --show-signature "$commit" | grep "^gpg: Good signature")
 
     ## the following extracts the signing keyid (either short or long) from the
     ## signature on $rev_cur:
-    signing_keyid=$(git show --show-signature "$commit" | \
+    signing_keyid=$(git show --no-patch --format=%H --show-signature "$commit" | \
         grep -o -E "key ID [0-9A-Fa-f]{8,16}" | \
         cut -d ' ' -f 3 )
 
@@ -239,13 +239,9 @@ for commit in $span ; do
             else
                 ## if it's a tag, check that it's GPG signed
 
-                ## we have to grep for 'gpg:' first, otherwise any tag message
-                ## could simply include the words "Good Signature" and pass the
-                ## test, same goes for the keyids
-
                 allowed_keyid=false
                 for keyid in "${trusted_keys[@]}"; do
-                    if test -n "$(git tag --verify $ref | grep gpg: | grep $keyid )"; then
+                    if test -n "$(git tag --verify $ref 2>&1 >/dev/null | grep '^gpg:' | grep $keyid )"; then
                         allowed_keyid=true
                     fi
                 done
