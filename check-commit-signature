@@ -96,14 +96,8 @@ for commit in "$span" ; do
 
     ## check that the current revison object is a hexidecimal hash of length 40
     check_rev=$(git rev-parse --verify "$commit")
-    if [[ "$check_rev" != *[!0-9A-Fa-f]* ]]; then
-        echo "*** Commit hash for commit $commit is not hex" >&2
-        exit 1
-    fi
-
-    hash_len="${#check_rev}"
-    if [[ "$hash_len" != 40 ]]; then
-        echo "*** Commit hash for commit $commit has bad length of $hash_len " >&2
+    if ! grep -q -E '^[0-9A-Fa-f]{40}$' <<< $check_rev; then
+        echo "*** Commit hash is not 40 hex characters" >&2
         exit 1
     fi
 
