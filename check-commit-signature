@@ -112,14 +112,21 @@ for commit in $span ; do
     fi
 
     ## get the commit type of the current rev:
-    merge=$(git rev-list -n 1 --merges "$rev_cur".."$commit")
+    ## a commit with a hash full of zeros is a deletion of a ref
     if [ "$commit" = "$zero" ]; then
         commit_type=delete
     else
-        if test -n "$merge"; then
-            commit_type=merge
-        else
+        if [ "$rev_cur" = "$zero" ]; then
+            ## there was no previous commit to check against,
+            ## so this is the first commit on a branch
             commit_type=$(git cat-file -t "$commit")
+        else
+            merge=$(git rev-list -n 1 --merges "$rev_cur".."$commit")
+            if test -n "$merge"; then
+                commit_type=merge
+            else
+                commit_type=$(git cat-file -t "$commit")
+            fi
         fi
     fi
 
