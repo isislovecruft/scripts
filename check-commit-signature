@@ -282,7 +282,7 @@ for commit in $span ; do
             fi
 
             if [ "$allowunsignedcommits" != "true" ]; then
-                if [ -n "$has_good_sig" ]; then
+                if [ -z "$has_good_sig" ]; then
                     echo "*** Bad signature on commit $commit" >&2
                     exit 1
                 fi
