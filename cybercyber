@@ -73,13 +73,14 @@ function allofthecybers ()
     done
 }
 
-quiet=
+quiet=1
 
-while getopts haq f; do
+while getopts haqv f; do
     case $f in
         h)  usage ; exit 0 ;;
         a) allofthecybers ; shift ;;
         q) quiet=1 ;;
+        v) quiet=  ;;
         # don't we need `shift 2` above? or `shift $(( OPTIND - 1))`?
     esac
 done
@@ -91,4 +92,4 @@ else
     espeak -x --ipa=1 -s 130 -k 20 -p 25 "Cyber${CYBER_WORD}!" 1>/dev/null 2>&1
 fi
 
-exit $?
+exit 0
