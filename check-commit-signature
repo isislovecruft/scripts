@@ -64,10 +64,13 @@ allowmodifytag=$(git config --bool hooks.allowmodifytag)
 ## a keyserver.
 ##
 declare -A collaborators
-collaborators['aagbsn']='91D4 3A5B 1016 CEB6 D352  65AE 2C4B 239D D876 C9F6'
-collaborators['hellais']='46E5 EF37 DE26 4EA6 8DCF  53EA E3A2 1297 150F E210'
-collaborators['ioerror']='228F AD20 3DE9 AE7D 84E2  5265 CF9A 6F91 4193 A197'
-collaborators['isis']='0A6A 58A1 4B59 46AB DE18  E207 A3AD B67A 2CDB 8B35'
+## Add collaborators like so:
+##
+## collaborators['nickname']='FINGERPRINT'
+##
+## For example, to add me, do:
+##
+## collaborators['isis']='0A6A 58A1 4B59 46AB DE18  E207 A3AD B67A 2CDB 8B35'
 
 ## get the keyids from the fingerprints above:
 declare -A trusted_keys
