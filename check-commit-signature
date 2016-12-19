@@ -13,6 +13,9 @@
 # hooks.allowunsignedcommits
 #   This boolean sets whether unsigned tags, and merges with unsigned commits
 #   into master, are allowed. By default, they are not allowed.
+# hooks.allowunsignedtags
+#   This boolean sets whether unsigned tags are allowed. By default,
+#   they are not allowed.
 # hooks.allowcommitsonmaster
 #   This boolean sets whether non-merge commits are allowed on master. By
 #   default, these are not allowed.
@@ -43,6 +46,7 @@
 ## server config
 ##################
 allowunsignedcommits=$(git config --bool hooks.allowunsignedcommits)
+allowunsignedtags=$(git config --bool hooks.allowunsignedtags)
 allowcommitsonmaster=$(git config --bool hooks.allowcommitsonmaster)
 allowhotfixonmaster=$(git config --bool hooks.allowhotfixonmaster)
 allowdeletebranch=$(git config --bool hooks.allowdeletebranch)
@@ -81,43 +85,167 @@ for collab in "${!collaborators[@]}"; do
     #trusted_keys["$collab"]="$longid"
 done
 
+is_allowed_signer() {
+    signing_keyid=$1
+
+    if [ -z "$signing_keyid" ]; then
+        echo "*** Error: is_allowed_signer(): No key ID supplied" >&2
+        return 1
+    fi
+
+    fpr_signing_keyid=$(gpg --fingerprint "$signing_keyid" | \
+        grep -o -E "([0-9A-F]{4}[[:space:]]{0,2}){10}")
+
+    allowed_keyid=1
+
+    for collab in "${!trusted_keys[@]}"; do
+        ## XXX the $keyid is currently only a short key id
+        ## because git doesn't give us a way to ask for a
+        ## long keyid
+        keyid="${trusted_keys["$collab"]}"
+        if [ "$signing_keyid" = "$keyid" ]; then
+            ## check that the fingerprint of the key that
+            ## gave us a good signature matches the
+            ## hardcoded ones:
+            if [ "$fpr_signing_keyid" = "${collaborators["$collab"]}" ]; then
+                allowed_keyid=0
+                break
+            fi
+        fi
+    done
+
+    return $allowed_keyid
+}
+
 ## $1 is the git ref which is being revised
 ## $2 is the last HEAD
 ## $3 is the HEAD commit of the series of commits being applied
 ref=$1
 rev_old=$2
 rev_new=$3
-span=$(git rev-list ^$rev_old $rev_new)
+
+## the following is the short reference name for tags, i.e. 'v0.1.2' in
+## lieu of 'refs/tags/v0.1.2':
+short_ref=${ref##refs/tags/}
+
+## a hash full of zeroes is how Git represents "nothing"
+zero="0000000000000000000000000000000000000000"
+
+## get all new commits on branch ref, even if it's a new branch
+if [ "$rev_old" = "$zero" ]; then
+    # list everything reachable from rev_new but not any heads
+    span=$(git rev-list $rev_new --not --branches='*')
+else
+    span=$(git rev-list ^$rev_old $rev_new)
+fi
+
+if [ "$allowcommitsonmaster" != "true" ]; then
+    ## the only commits allowed on master are merges which have rev_old as
+    ## a direct parent of rev_new
+    ##
+    ## we have to check this in a separate step, since "git rev-list
+    ## ^rev_old rev_new" on master at the merge of a feature branch will
+    ## also give us all the commits on the feature branch, and we won't
+    ## have enough context while looping through those commits to do this
+    ## check properly
+    if [ "$ref" = "refs/heads/master" ]; then
+        ## if rev_new isn't a merge, it will only have one parent and
+        ## this "git show" command will return nothing
+        parents=$(git show --merges --no-patch --format=%P $rev_new)
+        old_is_parent_of_new=false
+        for parent in $parents ; do
+            if [ "$rev_old" = "$parent" ]; then
+                old_is_parent_of_new=true
+                break
+            fi
+        done
+
+        if [ "$old_is_parent_of_new" != "true" ]; then
+            echo "*** Master only accepts merges of feature branches" >&2
+            exit 1
+        fi
+    fi
+fi
+
+if [ -z "$span" ]; then
+    ## rev_new pointed to something considered by "git rev-list" to be
+    ## already in the commit graph, which could be a commit (if we're
+    ## adding a lightweight tag) or a tag object (if we're adding an
+    ## annotated tag), since "git rev-list" doesn't consider the tag
+    ## object to be separate from the commit it points to
+
+    type=$(git cat-file -t $rev_new)
+    case $type in
+        commit)
+            ## lightweight tag
+            if [ "$allowunsignedtags" != "true" -o "$allowunannotated" != "true" ]; then
+                echo "*** The un-annotated tag $short_ref is not allowed in this repository" >&2
+                echo "*** Use 'git tag [ -a | -s ]' for tags you want to propagate." >&2
+                exit 1
+            fi
+            ;;
+        tag)
+            ## annotated tag
+            if [ "$rev_old" != $zero -a "$allowmodifytag" != "true" ]; then
+                echo "*** Tag $short_ref already exists." >&2
+                echo "*** Modifying a tag is not allowed in this repository." >&2
+                exit 1
+            else
+                if [ "$allowunsignedtags" != "true" ]; then
+                    result=$(git verify-tag $rev_new 2>&1 >/dev/null)
+                    if ! grep '^gpg: Good signature' <<< "$result"; then
+                        echo "*** Tag $short_ref is not signed" >&2w
+                        exit 1
+                    fi
+
+                    signing_keyid=$(<<<"$result" grep "^gpg: Signature made" | \
+                        grep -o -E "key ID [0-9A-Fa-f]{8,16}" | \
+                        cut -d ' ' -f 3 )
+
+                    if is_allowed_signer $signing_keyid; then
+                        echo "*** Good signature on tag $short_ref by signing key $signing_keyid" >&2
+                    else
+                        echo "*** Rejecting tag $short_ref due to lack of a valid GPG signature" >&2w
+                        exit 1
+                    fi
+                fi
+            fi
+            ;;
+        *)
+            echo "*** No new commits, but the pushed ref $ref is a \"$type\" instead of a tag? I'm confused." >&2
+            exit 1
+            ;;
+    esac
+fi
 
 ## for all the commits in the series, check the type of the commit against the
 ## commit directly before it:
 rev_cur=$rev_old                   ## set the current rev to the previous HEAD
-for commit in "$span" ; do
+for commit in $span ; do
 
     ## check that the current revison object is a hexidecimal hash of length 40
     check_rev=$(git rev-parse --verify "$commit")
-    if [[ "$check_rev" != *[!0-9A-Fa-f]* ]]; then
-        echo "*** Commit hash for commit $commit is not hex" >&2
-        exit 1
-    fi
-
-    hash_len="${#check_rev}"
-    if [[ "$hash_len" != 40 ]]; then
-        echo "*** Commit hash for commit $commit has bad length of $hash_len " >&2
+    if ! grep -q -E '^[0-9A-Fa-f]{40}$' <<< $check_rev; then
+        echo "*** Commit hash is not 40 hex characters" >&2
         exit 1
     fi
 
     ## get the commit type of the current rev:
     ## a commit with a hash full of zeros is a deletion of a ref
-    zero="0000000000000000000000000000000000000000"
-    merge=$(git rev-list -n 1 --merges "$rev_cur".."$commit")
     if [ "$commit" = "$zero" ]; then
         commit_type=delete
     else
-        if test -n "$merge"; then
-            commit_type=merge
-        else
+        if [ "$rev_cur" = "$zero" ]; then
+            ## there was no previous commit to check against,
+            ## so this is the first commit on a branch
             commit_type=$(git cat-file -t "$commit")
+        else
+            merge=$(git rev-list -n 1 --merges "$rev_cur".."$commit")
+            if test -n "$merge"; then
+                commit_type=merge
+            else
+                commit_type=$(git cat-file -t "$commit")
+            fi
         fi
     fi
 
@@ -130,32 +258,41 @@ for commit in "$span" ; do
     is_from_release=$(git branch --contains "$commit" | grep release )
 
     ## the following returns non-null if $rev_cur is a signed tag:
-    is_signed_tag=$(git tag --verify "$ref" | grep gpg: )
+    is_signed_tag=$(git tag --verify "$ref" 2>&1 >/dev/null | grep '^gpg: Good signature')
 
     ## the following returns non-null if $rev_cur has a signature, and gpg reports
     ## the signature is good:
-    has_good_sig=$(git log --format=%H --show-signature "$commit" | grep "Good signature")
+    has_good_sig=$(git show --no-patch --format=%H --show-signature "$commit" | grep "^gpg: Good signature")
 
     ## the following extracts the signing keyid (either short or long) from the
     ## signature on $rev_cur:
-    signing_keyid=$(git show --show-signature "$commit" | \
+    signing_keyid=$(git show --no-patch --format=%H --show-signature "$commit" | \
         grep -o -E "key ID [0-9A-Fa-f]{8,16}" | \
         cut -d ' ' -f 3 )
 
-    fpr_signing_keyid= $(gpg --fingerprint $signing_keyid | \
+    fpr_signing_keyid=$(gpg --fingerprint "$signing_keyid" | \
         grep -o -E "([0-9A-F]{4}[[:space:]]{0,2}){10}")
 
-    ## the following is the short reference name for tags, i.e. 'v0.1.2' in
-    ## lieu of 'refs/tags/v0.1.2':
-    short_ref=${ref##refs/tags/}
-
     case "$ref","$commit_type" in
-        refs/heads/master,commit)
-            ## do not allow commits directly onto master
-            if [ "$allowcommitsonmaster" != "true" ]; then
-                echo "*** The non-merge commit $commit is not allowed to be pushed to master" >&2
-                echo "*** Branch master can only take merge commits from branches develop/* and release-* " >&2
+        refs/heads/*,commit)
+            ## commit on any branch
+            if [ "$rev_old" = "$zero" -a "$denycreatebranch" = "true" ]; then
+                echo "*** Creating a branch is not allowed in this repository" >&2
                 exit 1
+            fi
+
+            if [ "$allowunsignedcommits" != "true" ]; then
+                if [ -z "$has_good_sig" ]; then
+                    echo "*** Bad signature on commit $commit" >&2
+                    exit 1
+                fi
+
+                if is_allowed_signer $signing_keyid; then
+                    echo "*** Good signature on commit $commit by signing key $signing_keyid" >&2
+                else
+                    echo "*** Key $signing_keyid is not allowed to sign commit $commit" >&2
+                    exit 1
+                fi
             fi
             ;;
         refs/heads/master,merge)
@@ -164,33 +301,34 @@ for commit in "$span" ; do
                 echo "*** Branch master only takes merge commits originating from develop/* or release-* branches" >&2
                 exit 1
             else
-                allowed_keyid=false
-                if test -n "$has_good_sig" -a -n "$signing_keyid" ; then
-                    for collab in "${!trusted_keys[@]}"; do
-                        ## XXX the $keyid is currently only a short key id
-                        ## because git doesn't give us a way to ask for a
-                        ## long keyid
-                        keyid="${trusted_keys["$collab"]}"
-                        if [[ "$signing_keyid" == "$keyid" ]]; then
-                            ## check that the fingerprint of the key that
-                            ## gave us a good signature matches the
-                            ## hardcoded ones:
-                            if [[ "$fpr_signing_keyid" == "${collaborators["$collab"]}" ]]; then
-                                allowed_keyid=true
-                                echo "*** Good signature on commit $commit made by $collab with signing key $signing_key " >&2
-                            fi
+                if [ "$allowunsignedcommits" != "true" ]; then
+                    if [ -n "$has_good_sig" -a -n "$signing_keyid" ]; then
+                        if is_allowed_signer $signing_keyid; then
+                            echo "*** Good signature on merge $commit by signing key $signing_keyid" >&2
+                        else
+                            echo "*** Key $signing_keyid is not allowed to sign merge $commit" >&2
+                            exit 1
                         fi
-                    done
-                else
-                    echo "*** Missing or bad signature on commit $commit" >&2
+                    else
+                        echo "*** Merges must be signed with an authorised key" >&2
+                        exit 1
+                    fi
                 fi
-
-                if ! $allowed_keyid ; then
-                    echo "*** Merges to master can only be made from branches with names beginning with release-* or develop/*" >&2
-                    echo "*** and must be signed with one of the following keys:" >&2
-                    for key in "${trusted_keys[@]}"; do
-                        echo "*** $key" >&2
-                    done
+            fi
+            ;;
+        refs/heads/*,merge)
+            ## merge into non-master branch
+            if [ "$allowunsignedcommits" != "true" ]; then
+                if [ -n "$has_good_sig" -a -n "$signing_keyid" ]; then
+                    if is_allowed_signer $signing_keyid; then
+                        echo "*** Good signature on merge $commit by signing key $signing_keyid" >&2
+                    else
+                        echo "*** Key $signing_keyid is not allowed to sign merge $commit" >&2
+                        exit 1
+                    fi
+                else
+                    echo "*** Merges must be signed with an authorised key" >&2
+                    exit 1
                 fi
             fi
             ;;
@@ -206,56 +344,10 @@ for commit in "$span" ; do
             echo "*** Branch master only takes merge commits originating from develop/* or release-* branches" >&2
             exit 1
             ;;
-        refs/tags/*,commit)
-            ## un-annotated tag
-            if [ "$allowunannotated" != "true" ]; then
-                echo "*** The un-annotated tag, ${short_ref}, is not allowed in this repository" >&2
-                echo "*** Use 'git tag [ -a | -s ]' for tags you want to propagate." >&2
-                exit 1
-            fi
-            ;;
         refs/tags/*,delete)
             ## delete tag
             if [ "$allowdeletetag" != "true" ]; then
                 echo "*** Deleting a tag is not allowed in this repository" >&2
-                exit 1
-            fi
-            ;;
-        refs/tags/*,tag)
-            ## annotated tag
-            if [ "$allowmodifytag" != "true" ] && git rev-parse "$ref" > /dev/null 2>&1 ; then
-                echo "*** Tag $shortref already exists." >&2
-                echo "*** Modifying a tag is not allowed in this repository." >&2
-                exit 1
-            else
-                ## if it's a tag, check that it's GPG signed
-
-                ## we have to grep for 'gpg:' first, otherwise any tag message
-                ## could simply include the words "Good Signature" and pass the
-                ## test, same goes for the keyids
-
-                allowed_keyid=false
-                for keyid in "${trusted_keys[@]}"; do
-                    if test -n "$(git tag --verify $ref | grep gpg: | grep $keyid )"; then
-                        allowed_keyid=true
-                    fi
-                done
-
-                if [[ "$authorized" == "false" ]]; then
-                    echo "*** Rejecting tag $short_ref due to lack of a valid GPG signature" >&2
-                    echo "*** Authors and keys allowed to create tags on this repo:" >&2
-                    for collab in "${!collaborators[@]}"; do
-                        keyid="${collaborators["$collab"]}"
-                        echo "*** $collab $key " >&2
-                    done
-                    exit 1
-                fi
-            fi
-            ;;
-        refs/heads/*,commit)
-            ## commit on a non-master branch
-            if [ "$rev_old" = "$zero" -a "$denycreatebranch" = "true" ]; then
-                echo "*** Creating a branch is not allowed in this repository" >&2
                 exit 1
             fi
             ;;
