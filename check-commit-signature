@@ -261,7 +261,7 @@ for commit in $span ; do
     is_from_release=$(git branch --contains "$commit" | grep release )
 
     ## the following returns non-null if $rev_cur is a signed tag:
-    is_signed_tag=$(git tag --verify "$ref" 2>&1 >/dev/null | grep '^gpg: Good signature')
+    is_signed_tag=$(git tag --verify "$ref" 2>&1 >/dev/null | grep '^gpg:')
 
     ## the following returns non-null if $rev_cur has a signature, and gpg reports
     ## the signature is good:
