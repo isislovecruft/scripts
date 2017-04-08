@@ -52,7 +52,7 @@ TOR_TRANS_PORTS="9040"
 TOR_DNS_PORTS="5353"
 TRANSPROXY_USERS="anon"
 
-GARBAGE=true
+GARBAGE=false
 GARBAGE_PROBES="$TOR_SOCKS_PORTS $TOR_CONTROL_PORTS $TOR_DIR_PORTS $TOR_OR_PORTS"
 
 ## ICMP and IGMP are ownerless, meaning that outgoing "pings" do not belong to
@@ -60,19 +60,20 @@ GARBAGE_PROBES="$TOR_SOCKS_PORTS $TOR_CONTROL_PORTS $TOR_DIR_PORTS $TOR_OR_PORTS
 ## ping, they can be de-anonymised.
 ##
 ## Note that this disables pings and icmp-based traceroutes for *all* users.
-IPv4_BLOCK_OUTGOING_PINGS=false
-IPv6_BLOCK_OUTGOING_PINGS=false
+IPv4_BLOCK_OUTGOING_PINGS=true
+IPv6_BLOCK_OUTGOING_PINGS=true
 
 ###############################################################################
 ## GARBAGE PROBE PACKET TAGGING
 ###############################################################################
 ## This has to go before the invalid packet rules, to catch the garbage probes:
-if test -n "$GARBAGE_PROBES"; then
-    for port in $GARBAGE_PROBES ; do
-        sudo iptables -A INPUT -p tcp --dport "$port" -j CONNMARK --set-mark 1
-        sudo iptables -A INPUT -p udp --dport "$port" -j CONNMARK --set-mark 1
-    done
-fi
+if $GARBAGE ; then
+    if test -n "$GARBAGE_PROBES"; then
+        for port in $GARBAGE_PROBES ; do
+            sudo iptables -A INPUT -p tcp --dport "$port" -j CONNMARK --set-mark 1
+            sudo iptables -A INPUT -p udp --dport "$port" -j CONNMARK --set-mark 1
+        done
+    fi
 
 ## Catch the INVALID garbage probe packets of len==40 before they hit the
 ## invalid DROP filter (these seem to always go to the ORPort), and send them
@@ -82,16 +83,17 @@ fi
 ##
 ##    $ tcpdump -i nflog:30 -w garbage.pcap
 ##
-if test -n "$GARBAGE_PROBES"; then
-    for port in $TOR_OR_PORTS ; do
-        sudo iptables -A INPUT -p tcp --dport "$port" -m state --state INVALID \
-            -j LOG --log-prefix "iptables: Garbage to ORPort: " --log-level 7
-        sudo iptables -A INPUT -p tcp --dport "$port" -m state --state INVALID \
-            -m connmark --mark 1 \
-            -j NFLOG --nflog-prefix "GARBAGE PROBE " --nflog-group 30
-        sudo iptables -A INPUT -p tcp --dport "$port" -m state --state INVALID \
-            -j REJECT --reject-with tcp-reset
-    done
+    if test -n "$GARBAGE_PROBES"; then
+        for port in $TOR_OR_PORTS ; do
+            sudo iptables -A INPUT -p tcp --dport "$port" -m state --state INVALID \
+                 -j LOG --log-prefix "iptables: Garbage to ORPort: " --log-level 7
+            sudo iptables -A INPUT -p tcp --dport "$port" -m state --state INVALID \
+                 -m connmark --mark 1 \
+                 -j NFLOG --nflog-prefix "GARBAGE PROBE " --nflog-group 30
+            sudo iptables -A INPUT -p tcp --dport "$port" -m state --state INVALID \
+                 -j REJECT --reject-with tcp-reset
+        done
+    fi
 fi
 
 ##--------------##
