@@ -1,0 +1,183 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
+"""
+ ssh-one-key-per-host
+ -----------------------
+
+ Given a list of hostnames, generate an SSH key for each one, then print out
+ lines of ``allowed_hosts=[…]`` for each one, á la
+ https://db.torproject.org/doc-mail.html or https://db.debian.org/doc-mail.html
+ style.
+
+ :author:    Isis <isis@patternsinthevoid.net> 0x0A6A58A14B5946ABDE18E207A3ADB67A2CDB8B35
+ :version:   0.0.1
+ :license:   MIT
+ :copyright: © 2017 Isis Agora Lovecruft
+"""
+
+from __future__ import print_function
+from __future__ import unicode_literals
+
+import argparse
+import logging
+import os
+import re
+import requests
+import subprocess
+import sys
+
+SSH_DIR = os.path.expanduser("~/.ssh")
+URL = "https://db.torproject.org/machines.cgi"
+REGEX = "host=[a-z]*\">([a-z]*\.torproject\.org)"
+
+
+log = logging.getLogger()
+
+
+def _get_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-m', '--hosts',
+                        help=("Comma separated list of hosts"))
+    parser.add_argument('-d', '--dir',
+                        help=("SSH config directory to place new keys into "
+                              "(default: %s)" % SSH_DIR))
+    parser.add_argument('-c', '--clobber', action='store_true',
+                        help=("Overwrite ssh keyfiles in DIR"))
+    parser.add_argument('-C', '--comment',
+                        help=("Comment for all new ssh keys"))
+    parser.add_argument('-p', '--password', action='store_true',
+                        help=("Ask for a password once, for all new ssh keys "))
+
+    fetch_group = parser.add_argument_group(title='Fetching',
+                                            description="Options for fetching available hosts")
+    fetch_group.add_argument('-u', '--url', help=("A URL to parse for hostnames, "
+                                                  "use -r to specify a regex to "
+                                                  "parse (default: %s)" % URL))
+    fetch_group.add_argument('-r', '--regex', help=("A regex to parse the URL for hostnames "
+                                                    "(default: %s)" % REGEX))
+
+    log_group = parser.add_argument_group(title='Logging',
+                                          description="Options and settings for logging")
+    log_group.add_argument('--stderr', action='store_true', help="Log to stderr")
+    log_group.add_argument('--stdout', action='store_true', help="Log to stdout")
+    log_group.add_argument('--logfile', help="Log to file")
+    log_group.add_argument('--loglevel', help="Log level", default="INFO",
+                           choices=["DEBUG", "INFO", "WARN", "ERROR", "CRITICAL"])
+
+    args = parser.parse_args()
+    return args
+
+def fetch_and_parse_url(url, regex):
+    logging.info("Fetching %s ..." % url)
+
+    try:
+        req = requests.get(url)
+    except requests.exceptions.ConnectionError as err:
+        logging.error("Could not connect to %s: %s" % (url, err.msg))
+        raise SystemExit(2)
+
+    if req.status_code != 200:
+        logging.error("There was an error requesting the URL %s: %s %s"
+                      % (url, req.status_code, req.reason))
+        raise SystemExit(2)
+        
+    logging.debug("Parsing response...")
+    regexp = re.compile(regex)
+    matches = list(set(regexp.findall(req.content)))
+
+    logging.debug("Found %d matches: %s" % (len(matches), matches))
+
+    return matches
+
+def create_key_for_host(host, password=None, comment=None, ssh_dir=None):
+    keytype = "ed25519"
+    hostname_regex = re.compile("([a-z]*)\.([a-z]*)\.[a-z]*")
+    hostname, domain = hostname_regex.findall(host)[0]
+    filename = os.path.sep.join([ssh_dir, "id_%s_%s_%s" % (keytype, domain, hostname)])
+
+    args = [
+        "ssh-keygen",
+        "-t", "%s" % keytype,
+        "-N", "%s" % password,
+        "-f", "%s" % filename,
+    ]
+
+    if comment:
+        args.append("-C")
+        args.append("%s" % comment)
+
+    logging.info("Generating key for %s..." % host)
+
+    proc = subprocess.Popen(args, shell=False,
+                            stdin=subprocess.PIPE,
+                            stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE)
+    returncode = proc.wait()
+
+    if returncode:
+        logging.error("There was an error calling `%s`: %s"
+                      % (' '.join(args), proc.stderr.read()))
+    else:
+        logging.debug(proc.stdout.read())
+        return "%s.pub" % filename
+
+def print_allowed_hosts_lines(pubkeys):
+    for (host, pubkey_file) in pubkeys:
+        with open(pubkey_file) as fh:
+            pubkey = fh.read()
+            print("allowed_hosts=%s %s" % (host, pubkey))
+
+def print_ssh_config_lines(pubkeys):
+    for (host, pubkey_file) in pubkeys:
+        print("Host tor-%s\n     Hostname %s\n     IdentityFile %s\n"
+              % (host.split('.', 1)[0], host, pubkey_file))
+
+def main(args):
+    hosts = []
+    pubkeys = []
+
+    if args.logfile:
+        log.addHandler(logging.FileHandler(args.logfile))
+    elif args.stderr:
+        log.addHandler(logging.StreamHandler(sys.stderr))
+    elif args.stdout:
+        log.addHandler(logging.StreamHandler(sys.stdout))
+    else:
+        log.addHandler(logging.StreamHandler(sys.stdout))
+
+    log.setLevel(logging._levelNames[args.loglevel])
+
+    password = ''
+    dir = SSH_DIR
+
+    if args.url:
+        hosts = fetch_and_parse_url(args.url or URL, args.regex or REGEX)
+    if args.hosts:
+        hosts.append(args.hosts)
+    if args.dir:
+        dir = os.path.expanduser(args.dir)
+
+    logging.info("Generating keys for %d hosts..." % len(hosts))
+    logging.debug("Generating keys for %s..." % " ".join(hosts))
+
+    if hosts:
+        if args.password:
+            password = raw_input("Please enter the new password for all generated keys: ")
+
+        for host in hosts:
+            pubkey_file = create_key_for_host(host,
+                                              password,
+                                              args.comment or '',
+                                              args.dir)
+            if pubkey_file:
+                pubkeys.append((host, pubkey_file))
+
+    logging.info("Generated %d keys in total" % len(pubkeys))
+    
+    if pubkeys:
+        print_allowed_hosts_lines(pubkeys)
+        print_ssh_config_lines(pubkeys)
+
+if __name__ == "__main__":
+    main(_get_args())
