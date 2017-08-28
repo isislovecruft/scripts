@@ -76,7 +76,7 @@ declare -A collaborators
 declare -A trusted_keys
 for collab in "${!collaborators[@]}"; do
     fpr="${collaborators["$collab"]}"
-    shortid=$(echo "$fpr" | cut -d ' ' --output-delimiter='' -f 10,11 )
+    shortid=$(echo "$fpr" | awk '{print $9$10}' )
     trusted_keys["$collab"]="$shortid"
 
     ## git log --show-signature currently will only give us the shortid
