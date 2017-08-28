@@ -266,7 +266,7 @@ for commit in $span ; do
         grep -oE "^gpg:\s+ using .* key [0-9A-Fa-f]{16}" | \
         sed -e 's/^.* \([0-9A-Fa-f]\{16\}$\)/\1/' )
 
-    fpr_signing_keyid=$(gpg --fingerprint "$signing_keyid" | \
+    fpr_signing_keyid=$(gpg --fingerprint "$signing_keyid" 2>/dev/null | \
         grep -o -E "([0-9A-F]{4}[[:space:]]{0,2}){10}")
 
     case "$ref","$commit_type" in
