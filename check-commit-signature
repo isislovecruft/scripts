@@ -75,17 +75,10 @@ declare -A collaborators
 ## get the keyids from the fingerprints above:
 declare -A trusted_keys
 for collab in "${!collaborators[@]}"; do
+    ## As per git version v2.10.0-rc1, git now shows longids by default
     fpr="${collaborators["$collab"]}"
-    shortid=$(echo "$fpr" | awk '{print $9$10}' )
-    trusted_keys["$collab"]="$shortid"
-
-    ## git log --show-signature currently will only give us the shortid
-    ##
-    ## if someday git will give us a way to get the longid of the signing
-    ## key, we should change to:
-    #longid=$(gpg --list-keys --with-colon "$shortid" | \
-    #    grep ^pub | cut -d ':' -f 5 )
-    #trusted_keys["$collab"]="$longid"
+    longid=$(echo "$fpr" | awk '{print $7$8$9$10}' )
+    trusted_keys["$collab"]="$longid"
 done
 
 is_allowed_signer() {
@@ -202,7 +195,7 @@ if [ -z "$span" ]; then
                     fi
 
                     signing_keyid=$(<<<"$result" grep "^gpg: Signature made" | \
-                        grep -o -E "key ID [0-9A-Fa-f]{8,16}" | \
+                        grep -o -E "key ID [0-9A-Fa-f]{16}" | \
                         cut -d ' ' -f 3 )
 
                     if is_allowed_signer $signing_keyid; then
@@ -270,8 +263,8 @@ for commit in $span ; do
     ## the following extracts the signing keyid (either short or long) from the
     ## signature on $rev_cur:
     signing_keyid=$(git show --no-patch --format=%H --show-signature "$commit" | \
-        grep -o -E "key ID [0-9A-Fa-f]{8,16}" | \
-        cut -d ' ' -f 3 )
+        grep -oE "^gpg:\s+ using .* key [0-9A-Fa-f]{16}" | \
+        sed -e 's/^.* \([0-9A-Fa-f]\{16\}$\)/\1/' )
 
     fpr_signing_keyid=$(gpg --fingerprint "$signing_keyid" | \
         grep -o -E "([0-9A-F]{4}[[:space:]]{0,2}){10}")
