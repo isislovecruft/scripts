@@ -45,15 +45,28 @@
 
 ## server config
 ##################
-allowunsignedcommits=$(git config --bool hooks.allowunsignedcommits)
-allowunsignedtags=$(git config --bool hooks.allowunsignedtags)
-allowcommitsonmaster=$(git config --bool hooks.allowcommitsonmaster)
-allowhotfixonmaster=$(git config --bool hooks.allowhotfixonmaster)
-allowdeletebranch=$(git config --bool hooks.allowdeletebranch)
-denycreatebranch=$(git config --bool hooks.denycreatebranch)
-allowunannotated=$(git config --bool hooks.allowunannotated)
-allowdeletetag=$(git config --bool hooks.allowdeletetag)
-allowmodifytag=$(git config --bool hooks.allowmodifytag)
+
+## $1 is the git ref which is being revised
+## $2 is the last HEAD
+## $3 is the HEAD commit of the series of commits being applied
+ref=$1
+rev_old=$2
+rev_new=$3
+
+# Test if our custom .gitconfig file is in the repo, if not, don't run
+git cat-file -e "$rev_old:.gitconfig" &>/dev/null || exit 0;
+
+allowunsignedcommits=$(git cat-file blob "$rev_old:.gitconfig" | git config --file /dev/stdin --bool hooks.allowunsignedcommits)
+allowunsignedtags=$(git cat-file blob "$rev_old:.gitconfig" | git config --file /dev/stdin --bool hooks.allowunsignedtags)
+allowcommitsonmaster=$(git cat-file blob "$rev_old:.gitconfig" | git config --file /dev/stdin --bool hooks.allowcommitsonmaster)
+allowhotfixonmaster=$(git cat-file blob "$rev_old:.gitconfig" | git config --file /dev/stdin --bool hooks.allowhotfixonmaster)
+allowdeletebranch=$(git cat-file blob "$rev_old:.gitconfig" | git config --file /dev/stdin --bool hooks.allowdeletebranch)
+denycreatebranch=$(git cat-file blob "$rev_old:.gitconfig" | git config --file /dev/stdin --bool hooks.denycreatebranch)
+allowunannotated=$(git cat-file blob "$rev_old:.gitconfig" | git config --file /dev/stdin --bool hooks.allowunannotated)
+allowdeletetag=$(git cat-file blob "$rev_old:.gitconfig" | git config --file /dev/stdin --bool hooks.allowdeletetag)
+allowmodifytag=$(git cat-file blob "$rev_old:.gitconfig" | git config --file /dev/stdin --bool hooks.allowmodifytag)
+
+git cat-file blob "$rev_old:.gitconfig" | git config --file /dev/stdin --list
 
 ## committers and their signing GPG key fingerprints should go in the
 ## ${collaborators} array:
@@ -79,6 +92,7 @@ for collab in "${!collaborators[@]}"; do
     fpr="${collaborators["$collab"]}"
     longid=$(echo "$fpr" | awk '{print $7$8$9$10}' )
     trusted_keys["$collab"]="$longid"
+
 done
 
 is_allowed_signer() {
@@ -112,13 +126,6 @@ is_allowed_signer() {
 
     return $allowed_keyid
 }
-
-## $1 is the git ref which is being revised
-## $2 is the last HEAD
-## $3 is the HEAD commit of the series of commits being applied
-ref=$1
-rev_old=$2
-rev_new=$3
 
 ## the following is the short reference name for tags, i.e. 'v0.1.2' in
 ## lieu of 'refs/tags/v0.1.2':
@@ -265,7 +272,6 @@ for commit in $span ; do
     signing_keyid=$(git show --no-patch --format=%H --show-signature "$commit" | \
         grep -oE "^gpg:\s+ using .* key [0-9A-Fa-f]{16}" | \
         sed -e 's/^.* \([0-9A-Fa-f]\{16\}$\)/\1/' )
-
     fpr_signing_keyid=$(gpg --fingerprint "$signing_keyid" 2>/dev/null | \
         grep -o -E "([0-9A-F]{4}[[:space:]]{0,2}){10}")
 
