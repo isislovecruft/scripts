@@ -40,6 +40,9 @@
 # hooks.denycreatebranch
 #   This boolean sets whether remotely creating branches will be denied
 #   in the repository.  By default this is allowed.
+# hooks.restrictmergetomaster
+#   This boolean sets whether restrictions on merging to master should be
+#   enforced. By default there won't be.
 #
 # @author Isis Agora Lovecruft, 0x2cdb8b35
 # @date 10 March 2013
@@ -77,6 +80,7 @@ denycreatebranch=$(git cat-file blob "$rev_old:.gitconfig" | git config --file /
 allowunannotated=$(git cat-file blob "$rev_old:.gitconfig" | git config --file /dev/stdin --bool hooks.allowunannotated)
 allowdeletetag=$(git cat-file blob "$rev_old:.gitconfig" | git config --file /dev/stdin --bool hooks.allowdeletetag)
 allowmodifytag=$(git cat-file blob "$rev_old:.gitconfig" | git config --file /dev/stdin --bool hooks.allowmodifytag)
+restrictmergetomaster=$(git cat-file blob "$rev_old:.gitconfig" | git config --file /dev/stdin --bool hooks.restrictmergetomaster)
 
 echo ".gitconfig file in repo found, running update hook."
 git cat-file blob "$rev_old:.gitconfig" | git config --file /dev/stdin --list
@@ -331,7 +335,7 @@ for commit in $span ; do
             ;;
         refs/heads/master,merge)
             ## only allow merges to master from release-* and develop/*
-            if test -z "$is_from_develop" -a -z "$is_from_release"; then
+            if [ "$restrictmergetomaster" = "true" ] && test -z "$is_from_develop" -a -z "$is_from_release"; then
                 echo "*** Branch master only takes merge commits originating from develop/* or release-* branches" >&2
                 exit 1
             else
