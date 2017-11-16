@@ -16,6 +16,9 @@
 # hooks.allowunsignedtags
 #   This boolean sets whether unsigned tags are allowed. By default,
 #   they are not allowed.
+# hooks.allowunverifiedsigs
+#   This boolean sets whether commits/tags signed by 
+#   unverified/untrusted keys are allowed. By default, they are not allowed.
 # hooks.allowcommitsonmaster
 #   This boolean sets whether non-merge commits are allowed on master. By
 #   default, these are not allowed.
@@ -37,6 +40,9 @@
 # hooks.denycreatebranch
 #   This boolean sets whether remotely creating branches will be denied
 #   in the repository.  By default this is allowed.
+# hooks.restrictmergetomaster
+#   This boolean sets whether restrictions on merging to master should be
+#   enforced. By default there won't be.
 #
 # @author Isis Agora Lovecruft, 0x2cdb8b35
 # @date 10 March 2013
@@ -45,40 +51,73 @@
 
 ## server config
 ##################
-allowunsignedcommits=$(git config --bool hooks.allowunsignedcommits)
-allowunsignedtags=$(git config --bool hooks.allowunsignedtags)
-allowcommitsonmaster=$(git config --bool hooks.allowcommitsonmaster)
-allowhotfixonmaster=$(git config --bool hooks.allowhotfixonmaster)
-allowdeletebranch=$(git config --bool hooks.allowdeletebranch)
-denycreatebranch=$(git config --bool hooks.denycreatebranch)
-allowunannotated=$(git config --bool hooks.allowunannotated)
-allowdeletetag=$(git config --bool hooks.allowdeletetag)
-allowmodifytag=$(git config --bool hooks.allowmodifytag)
 
-## committers and their signing GPG key fingerprints should go in the
-## ${collaborators} array:
-##
-## we hard code the fingerprint to protect against the possibility of the gpg
-## on the remote git server updating the keys (if it is configured to do so,
-## and also configured to use short keyids) and pulling in a colliding key from
-## a keyserver.
-##
-declare -A collaborators
-## Add collaborators like so:
-##
-## collaborators['nickname']='FINGERPRINT'
-##
-## For example, to add me, do:
-##
-## collaborators['isis']='0A6A 58A1 4B59 46AB DE18  E207 A3AD B67A 2CDB 8B35'
+## $1 is the git ref which is being revised
+## $2 is the last HEAD
+## $3 is the HEAD commit of the series of commits being applied
+ref=$1
+rev_old=$2
+rev_new=$3
 
-## get the keyids from the fingerprints above:
+## This file has been modified to run off a .gitconfig file in the root of the repo.
+## If this file doesn't exist, the hook will exit cleanly.
+## Because of this the hook can be included globally and only executes on projects that need it.
+## This way, you can add it as a global hook in i.e. Gitlab, and can be configured per-project.
+##
+## Be aware that this assumes that all collaborators are trustworthy and might
+## cause security issues if this isn't the case.
+## It's recommended to at least enable the GPG whitelist when using this hook.
+
+git cat-file -e "$rev_old:.gitconfig" &>/dev/null || exit 0;
+
+allowunsignedcommits=$(git cat-file blob "$rev_old:.gitconfig" | git config --file /dev/stdin --bool hooks.allowunsignedcommits)
+allowunsignedtags=$(git cat-file blob "$rev_old:.gitconfig" | git config --file /dev/stdin --bool hooks.allowunsignedtags)
+allowunverifiedsigs=$(git cat-file blob "$rev_old:.gitconfig" | git config --file /dev/stdin --bool hooks.allowunsignedtags)
+allowcommitsonmaster=$(git cat-file blob "$rev_old:.gitconfig" | git config --file /dev/stdin --bool hooks.allowcommitsonmaster)
+allowhotfixonmaster=$(git cat-file blob "$rev_old:.gitconfig" | git config --file /dev/stdin --bool hooks.allowhotfixonmaster)
+allowdeletebranch=$(git cat-file blob "$rev_old:.gitconfig" | git config --file /dev/stdin --bool hooks.allowdeletebranch)
+denycreatebranch=$(git cat-file blob "$rev_old:.gitconfig" | git config --file /dev/stdin --bool hooks.denycreatebranch)
+allowunannotated=$(git cat-file blob "$rev_old:.gitconfig" | git config --file /dev/stdin --bool hooks.allowunannotated)
+allowdeletetag=$(git cat-file blob "$rev_old:.gitconfig" | git config --file /dev/stdin --bool hooks.allowdeletetag)
+allowmodifytag=$(git cat-file blob "$rev_old:.gitconfig" | git config --file /dev/stdin --bool hooks.allowmodifytag)
+restrictmergetomaster=$(git cat-file blob "$rev_old:.gitconfig" | git config --file /dev/stdin --bool hooks.restrictmergetomaster)
+
+echo ".gitconfig file in repo found, running update hook."
+git cat-file blob "$rev_old:.gitconfig" | git config --file /dev/stdin --list
+
+## Whitelisted GPG key fingerprints are stored in .gitconfig in the root of the repo.
+## To add keys, you either edit the file directly:
+##
+## $ git config --file .gitconfig -e
+## [gpgkeys]
+##         whitelist = "0A6A 58A1 4B59 46AB DE18  E207 A3AD B67A 2CDB 8B35" # Isis
+##         whitelist = "0C83 9FFC C5A6 5925 D91B  F16C FF52 7312 2C52 C4E4" # Sebastiaan <seb@stiaan.io>
+##
+## Or you can add them through the git config command:
+##
+## $ git config --file .gitconfig gpgkeys.whitelist --add '0A6A 58A1 4B59 46AB DE18  E207 A3AD B67A 2CDB 8B35' \
+##   --add '0C83 9FFC C5A6 5925 D91B  F16C FF52 7312 2C52 C4E4'
+##
+## Do note that you cannot add a key description if you do it this way.
+##
+## Remember to add the public keys to the server, too, or verification will fail.
+## If allowunverifiedsigs=false, make sure the public keys are signed by a trusted key as well.
+
+readarray -t collaborators < <(git cat-file blob "$rev_old:.gitconfig" | git config --file /dev/stdin --get-all gpgkeys.whitelist)
+
+if [[ "$allowunsignedcommits" != true ]] && [[ "${#collaborators[@]}" -eq 0 ]]; then
+    echo "WARNING: allowunsignedcommits is false but no authorized keys have"
+    echo "WARNING: been added yet. Skipping module."
+    allowunsignedcommits=true
+fi
+
 declare -A trusted_keys
 for collab in "${!collaborators[@]}"; do
     ## As per git version v2.10.0-rc1, git now shows longids by default
     fpr="${collaborators["$collab"]}"
     longid=$(echo "$fpr" | awk '{print $7$8$9$10}' )
     trusted_keys["$collab"]="$longid"
+
 done
 
 is_allowed_signer() {
@@ -112,13 +151,6 @@ is_allowed_signer() {
 
     return $allowed_keyid
 }
-
-## $1 is the git ref which is being revised
-## $2 is the last HEAD
-## $3 is the HEAD commit of the series of commits being applied
-ref=$1
-rev_old=$2
-rev_new=$3
 
 ## the following is the short reference name for tags, i.e. 'v0.1.2' in
 ## lieu of 'refs/tags/v0.1.2':
@@ -258,14 +290,18 @@ for commit in $span ; do
 
     ## the following returns non-null if $rev_cur has a signature, and gpg reports
     ## the signature is good:
-    has_good_sig=$(git show --no-patch --format=%H --show-signature "$commit" | grep "^gpg: Good signature")
+    verify_sig=$(git verify-commit --raw "$commit" 2>&1)
+    has_good_sig=$?
+    if [ $has_good_sig -eq 0 ] && [ "$allowunverifiedsigs" != "true" ]; then
+        has_verified_sig=false
+        echo "$verify_sig" | grep -e '^\[GNUPG:\] TRUST_UNDEFINED' >/dev/null || has_verified_sig=true
+    fi
 
     ## the following extracts the signing keyid (either short or long) from the
     ## signature on $rev_cur:
     signing_keyid=$(git show --no-patch --format=%H --show-signature "$commit" | \
         grep -oE "^gpg:\s+ using .* key [0-9A-Fa-f]{16}" | \
         sed -e 's/^.* \([0-9A-Fa-f]\{16\}$\)/\1/' )
-
     fpr_signing_keyid=$(gpg --fingerprint "$signing_keyid" 2>/dev/null | \
         grep -o -E "([0-9A-F]{4}[[:space:]]{0,2}){10}")
 
@@ -278,8 +314,14 @@ for commit in $span ; do
             fi
 
             if [ "$allowunsignedcommits" != "true" ]; then
-                if [ -z "$has_good_sig" ]; then
+                if [ "$has_good_sig" -ne 0 ]; then
                     echo "*** Bad signature on commit $commit" >&2
+                    exit 1
+                fi
+
+                if [ "$allowunverifiedsigs" != "true" ] && [ "$has_verified_sig" != "true" ]; then
+                    echo "has_verified_sig $has_verified_sig"
+                    echo "*** Unverified signature on commit $commit" >&2
                     exit 1
                 fi
 
@@ -293,7 +335,7 @@ for commit in $span ; do
             ;;
         refs/heads/master,merge)
             ## only allow merges to master from release-* and develop/*
-            if test -z "$is_from_develop" -a -z "$is_from_release"; then
+            if [ "$restrictmergetomaster" = "true" ] && test -z "$is_from_develop" -a -z "$is_from_release"; then
                 echo "*** Branch master only takes merge commits originating from develop/* or release-* branches" >&2
                 exit 1
             else
@@ -366,3 +408,4 @@ for commit in $span ; do
     ## increment the current rev to the $commit we just checked:
     rev_cur=$commit
 done
+
